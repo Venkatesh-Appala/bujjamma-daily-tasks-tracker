@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 
 function toISODate(date) {
   const year = date.getFullYear()
@@ -67,7 +67,7 @@ function formatTaskTitle(title) {
 function App() {
   const [tasks, setTasks] = useState([])
   const [date, setDate] = useState(todayISO())
-  const [activeTab, setActiveTab] = useState('games')
+  const [activeTab, setActiveTab] = useState('tasks')
   const [unlockedGames, setUnlockedGames] = useState({})
   const [spentPoints, setSpentPoints] = useState(0)
   const [tictacToe, setTictacToe] = useState(Array(9).fill(null))
@@ -86,37 +86,39 @@ function App() {
   const [biggerScore, setBiggerScore] = useState(0)
   // Embed URL for external games
   const [embedUrl, setEmbedUrl] = useState('')
+  const catchTheAppleRef = useRef(null)
+  const snakeRef = useRef(null)
 
   const getDefaultTasks = () => [
-    { id: 1, title: 'Water The Plants', points: 5, description: 'Give the plants a good drink.', completedDates: [] },
-    { id: 2, title: 'Drink 3 Bottles Of Water', points: 5, description: 'Stay hydrated all day.', completedDates: [] },
-    { id: 23, title: 'Brush Twice Daily', points: 5, description: 'Brush teeth twice daily, morning and night.', completedDates: [] },
+    { id: 1, title: 'Water The Plants', points: 10, description: 'Give the plants a good drink.', completedDates: [] },
+    { id: 2, title: 'Drink 3 Bottles Of Water', points: 10, description: 'Stay hydrated all day.', completedDates: [] },
+    { id: 23, title: 'Brush Twice Daily', points: 10, description: 'Brush teeth twice daily, morning and night.', completedDates: [] },
     { id: 3, title: 'Do Yoga', points: 10, description: 'Stretch, breathe and relax with yoga.', completedDates: [] },
     { id: 28, title: 'Read 5 Pages in a book', points: 10, description: 'Read 3-5 pages from a book.', completedDates: [] },
-    { id: 4, title: 'Do Piano', points: 5, description: 'Practice piano pieces and scales.', completedDates: [] },
-    { id: 5, title: 'Practice 1 Music Song', points: 5, description: 'Practice one music song to improve voice and rhythm.', completedDates: [] },
-    { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 5, description: 'Chant 1 Bhagavad-gita sloka for daily practice.', completedDates: [] },
+    { id: 4, title: 'Do Piano', points: 10, description: 'Practice piano pieces and scales.', completedDates: [] },
+    { id: 5, title: 'Practice 1 Music Song', points: 10, description: 'Practice one music song to improve voice and rhythm.', completedDates: [] },
+    { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 10, description: 'Chant 1 Bhagavad-gita sloka for daily practice.', completedDates: [] },
     { id: 7, title: 'Chant 2 Prajna Prayers', points: 15, description: 'Chant 2 Prajna prayers for daily practice.', completedDates: [] },
-    { id: 8, title: 'Do 3x3 Cube', points: 12, description: 'Practice 3x3 cube speed solving.', completedDates: [] },
-    { id: 9, title: 'Do 4x4 Cube', points: 13, description: 'Practice 4x4 cube solving.', completedDates: [] },
+    { id: 8, title: 'Do 3x3 Cube', points: 10, description: 'Practice 3x3 cube speed solving.', completedDates: [] },
+    { id: 9, title: 'Do 4x4 Cube', points: 15, description: 'Practice 4x4 cube solving.', completedDates: [] },
     { id: 10, title: 'Do Maths Worksheet', points: 15, description: 'Finish one maths worksheet.', completedDates: [] },
     { id: 11, title: 'Do Xtra Math', points: 10, description: 'Solve Xtra maths questions.', completedDates: [] },
-    { id: 12, title: 'Do IXL Math', points: 5, description: 'Practice IXL Math problems.', completedDates: [] },
-    { id: 13, title: 'Do IXL Language Arts', points: 5, description: 'Practice IXL Language Arts.', completedDates: [] },
-    { id: 14, title: 'Do IXL Science', points: 5, description: 'Practice IXL Science.', completedDates: [] },
-    { id: 15, title: 'Do IXL Social Studies', points: 5, description: 'Practice IXL Social Studies.', completedDates: [] },
+    { id: 12, title: 'Do IXL Math', points: 10, description: 'Practice IXL Math problems.', completedDates: [] },
+    { id: 13, title: 'Do IXL Language Arts', points: 10, description: 'Practice IXL Language Arts.', completedDates: [] },
+    { id: 14, title: 'Do IXL Science', points: 10, description: 'Practice IXL Science.', completedDates: [] },
+    { id: 15, title: 'Do IXL Social Studies', points: 15, description: 'Practice IXL Social Studies.', completedDates: [] },
     { id: 16, title: 'Write An English Story', points: 15, description: 'Write a creative short story in English.', completedDates: [] },
     { id: 17, title: 'Write A Telugu Story', points: 15, description: 'Write a creative short story in Telugu.', completedDates: [] },
     { id: 18, title: 'Do Drawing', points: 10, description: 'Draw something creative.', completedDates: [] },
-    { id: 19, title: 'Play Chess', points: 15, description: 'Study chess moves and practice.', completedDates: [] },
-    { id: 20, title: 'Play Basketball', points: 15, description: 'Play a fun sport session.', completedDates: [] },
-    { id: 21, title: 'Play Badminton', points: 15, description: 'Play a fun sport session.', completedDates: [] },
+    { id: 19, title: 'Play Chess', points: 10, description: 'Study chess moves and practice.', completedDates: [] },
+    { id: 20, title: 'Play Basketball', points: 10, description: 'Play a fun sport session.', completedDates: [] },
+    { id: 21, title: 'Play Badminton', points: 10, description: 'Play a fun sport session.', completedDates: [] },
     { id: 24, title: 'Practice Dance', points: 10, description: 'Practice dance routine or exercises.', completedDates: [] },
     { id: 25, title: 'Go For A Walk', points: 15, description: 'Go for a walk outside for exercise and fresh air.', completedDates: [] },
     { id: 26, title: 'Ride Bicycle', points: 15, description: 'Ride bicycle for exercise.', completedDates: [] },
     { id: 27, title: 'Do Meditation', points: 10, description: 'Practice meditation for 10 minutes.', completedDates: [] },
-    { id: 22, title: 'Help In The Kitchen', points: 15, description: 'Assist with cooking or cleaning.', completedDates: [] },
-    { id: 28, title: 'Do 3 MashUp Puzzles', points: 15, description: 'Do 3 MashUp Puzzles.', completedDates: [] }
+    { id: 22, title: 'Help In The Kitchen', points: 10, description: 'Assist with cooking or cleaning.', completedDates: [] },
+    { id: 28, title: 'Do 3 MashUp Puzzles', points: 10, description: 'Do 3 MashUp Puzzles.', completedDates: [] }
   ]
 
   // Generate stable incremental IDs stored in localStorage
@@ -189,12 +191,8 @@ function App() {
     if (stored) {
       setSpentPoints(Number(stored))
     }
-    // PRE-UNLOCK selected games for testing (TicTacToe + Snake + Bigger)
-    setUnlockedGames({
-      ttt: true,
-      snake: true,
-      bigger: true
-    })
+    // start locked by default; unlock via redeemPointsForGame
+    setUnlockedGames({})
   }, [])
 
   useEffect(() => {
@@ -358,9 +356,18 @@ function App() {
     setTictacToeWinner(null)
   }
 
+  const enterFullscreen = ref => {
+    if (!ref?.current) return
+    const el = ref.current
+    if (el.requestFullscreen) el.requestFullscreen()
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
+    else if (el.msRequestFullscreen) el.msRequestFullscreen()
+  }
+
   const conversionRate = 100 // 100 points = $1
   const pointsEarned = tasks.reduce((sum, t) => (isDone(t, date) ? sum + (t.points || 0) : sum), 0)
   const totalPoints = tasks.reduce((sum, t) => sum + (Array.isArray(t.completedDates) ? t.completedDates.length * (t.points || 0) : 0), 0)
+  const availablePoints = totalPoints - spentPoints
   const completedCount = tasks.filter(t => isDone(t, date)).length
   const todaysCash = (pointsEarned / conversionRate).toFixed(2)
   const totalCash = (totalPoints / conversionRate).toFixed(2)
@@ -424,7 +431,7 @@ function App() {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: '1rem', padding: '1.5rem' }}>
+      <div className="card" style={{ marginTop: '0.5rem', padding: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '2px solid #ddd', paddingBottom: '1rem' }}>
           <button
             className={`btn ${activeTab === 'tasks' ? '' : 'btn-muted'}`}
@@ -482,110 +489,71 @@ function App() {
           </div>
         )}
 
-        {/* Games Tab */}
+        {/* Games Tab: replaced with user-provided embeds */}
         {activeTab === 'games' && (
           <div>
-            <div className="section-title" style={{ marginBottom: '1rem' }}>🎮 Unlock Games with Points</div>
-            <div className="muted" style={{ marginBottom: '0.5rem' }}>Redeem 50 points to unlock a game</div>
-            <div style={{ marginBottom: '1.5rem', padding: '0.75rem', backgroundColor: '#e3f2fd', borderRadius: '4px', fontWeight: 'bold', color: '#1976D2' }}>
-              💰 Available Balance: {totalPoints - spentPoints} pts
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              {/* Snake Game */}
-              <div className="card" style={{ backgroundColor: unlockedGames.snake ? '#e8f5e9' : '#f5f5f5', padding: '1rem' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>🐍 Snake</div>
-                {unlockedGames.snake ? (
-                  <div>
-                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
-                      <button className="btn" style={{ flex: 1 }} onClick={startStopSnake}>{snakeRunning ? 'Pause' : 'Start'}</button>
-                      <button className="btn" style={{ flex: 1 }} onClick={resetSnake}>Reset</button>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`, gap: '2px', background: '#ccc', padding: '4px' }}>
-                      {Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => {
-                        const isSnake = snake.includes(i)
-                        const isFood = food === i
-                        return (
-                          <div key={i} style={{ width: '20px', height: '20px', background: isSnake ? '#4CAF50' : isFood ? '#F44336' : '#fff', borderRadius: '3px' }} />
-                        )
-                      })}
-                    </div>
-                    <div style={{ marginTop: '0.5rem', textAlign: 'center' }}>Score: {snakeScore}</div>
-                    <div style={{ marginTop: '0.25rem', fontSize: '0.85rem' }} className="muted">Use arrow keys while running to change direction.</div>
-                  </div>
-                ) : (
-                  <button className="btn btn-success" style={{ width: '100%' }} onClick={() => redeemPointsForGame('Snake')}>
-                    Unlock for 50 pts
-                  </button>
-                )}
-              </div>
-
-              {/* Tic Tac Toe */}
-              <div className="card" style={{ backgroundColor: unlockedGames.ttt ? '#e8f5e9' : '#f5f5f5', padding: '1rem' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>⭕ Tic Tac Toe</div>
-                {unlockedGames.ttt ? (
-                  <div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.25rem', marginBottom: '0.5rem' }}>
-                      {tictacToe.map((cell, i) => (
-                        <button key={i} className="btn" style={{ padding: '1rem', fontSize: '1.25rem', fontWeight: 'bold' }} onClick={() => playTictacToe(i)}>
-                          {cell}
-                        </button>
-                      ))}
-                    </div>
-                    {tictacToeWinner && <div style={{ textAlign: 'center', fontWeight: 'bold', color: '#4CAF50' }}>🎉 {tictacToeWinner} Wins!</div>}
-                    <button className="btn" style={{ width: '100%', fontSize: '0.8rem', marginTop: '0.5rem' }} onClick={resetTictacToe}>Reset</button>
-                  </div>
-                ) : (
-                  <button className="btn btn-success" style={{ width: '100%' }} onClick={() => redeemPointsForGame('TTT')}>
-                    Unlock for 50 pts
-                  </button>
-                )}
-              </div>
-
-              {/* Bigger Game */}
-              <div className="card" style={{ backgroundColor: unlockedGames.bigger ? '#e8f5e9' : '#f5f5f5', padding: '1rem' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>🔲 Bigger</div>
-                {unlockedGames.bigger ? (
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ margin: '0 auto', width: biggerSize + 'px', height: biggerSize + 'px', background: '#1976D2', borderRadius: '6px', marginBottom: '0.5rem' }} onClick={growBigger} />
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn" style={{ flex: 1 }} onClick={growBigger}>Grow</button>
-                      <button className="btn" style={{ flex: 1 }} onClick={resetBigger}>Reset</button>
-                    </div>
-                    <div style={{ marginTop: '0.5rem' }}>Times grown: {biggerScore}</div>
-                    <div style={{ marginTop: '0.25rem', fontSize: '0.85rem' }} className="muted">Click the blue box or press Grow to increase size.</div>
-                  </div>
-                ) : (
-                  <button className="btn btn-success" style={{ width: '100%' }} onClick={() => redeemPointsForGame('Bigger')}>
-                    Unlock for 50 pts
-                  </button>
-                )}
-              </div>
-
-                {/* Embed external game */}
-                <div className="card" style={{ backgroundColor: '#fffbe6', padding: '1rem' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>🌐 Embed External Game</div>
-                  <div style={{ marginBottom: '0.5rem' }} className="muted">Paste an embeddable URL (CodePen, Itch.io, JSFiddle or other) below. Some sites block embedding.</div>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <select className="btn" style={{ flex: 1 }} onChange={e => setEmbedUrl(e.target.value)} value={embedUrl}>
-                      <option value="">Choose a preset...</option>
-                      <option value="https://codepen.io/">CodePen (root)</option>
-                      <option value="https://jsfiddle.net/">JSFiddle (root)</option>
-                      <option value="https://itch.io/">Itch.io (root)</option>
-                    </select>
-                    <input placeholder="https://example.com/embed/..." style={{ flex: 2, padding: '0.5rem' }} value={embedUrl} onChange={e => setEmbedUrl(e.target.value)} />
-                  </div>
-                  {embedUrl ? (
-                    <div>
-                      <div style={{ width: '100%', height: '240px', border: '1px solid #ddd' }}>
-                        <iframe title="embedded-game" src={embedUrl} style={{ width: '100%', height: '100%', border: 'none' }} />
-                      </div>
-                      <div style={{ marginTop: '0.5rem' }} className="muted">If the game doesn't load, that site likely blocks embedding (X-Frame-Options).</div>
-                    </div>
-                  ) : null}
+            <div className="section-title" style={{ marginBottom: '1rem' }}>🎮 Games</div>
+            <div className="muted" style={{ marginBottom: '0.5rem' }}>Embedded games (from provided URLs)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+              {/* Embed 1 */}
+              <div className="card" style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ fontWeight: 'bold' }}>Catch the Apple</div>
+                  {unlockedGames['Catch the Apple'] && (
+                    <button className="btn btn-muted" style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }} onClick={() => enterFullscreen(catchTheAppleRef)}>
+                      Fullscreen
+                    </button>
+                  )}
                 </div>
+                {unlockedGames['Catch the Apple'] ? (
+                  <div style={{ border: '1px solid #ddd', padding: '0.5rem', borderRadius: '6px' }}>
+                    <iframe ref={catchTheAppleRef} src="https://scratch.mit.edu/projects/477886605/embed" title="Catch the Apple" allowtransparency="true" width="485" height="402" frameBorder="0" scrolling="no" allowFullScreen style={{ width: '100%', height: '420px', border: 'none' }} />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="muted" style={{ marginBottom: '0.5rem' }}>Locked — redeem 50 points to unlock this game.</div>
+                    <button
+                      className="btn btn-success"
+                      style={{ width: '100%', cursor: availablePoints < 50 ? 'not-allowed' : 'pointer' }}
+                      onClick={() => redeemPointsForGame('Catch the Apple')}
+                      disabled={availablePoints < 50}
+                      title={availablePoints < 50 ? 'Need 50 available points to unlock' : 'Unlock for 50 pts'}
+                    >
+                      Unlock for 50 pts
+                    </button>
+                  </div>
+                )}
+              </div>
 
-
+              {/* Embed 2 */}
+              <div className="card" style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ fontWeight: 'bold' }}>Snake!</div>
+                  {unlockedGames['Snake!'] && (
+                    <button className="btn btn-muted" style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }} onClick={() => enterFullscreen(snakeRef)}>
+                      Fullscreen
+                    </button>
+                  )}
+                </div>
+                {unlockedGames['Snake!'] ? (
+                  <div style={{ border: '1px solid #ddd', padding: '0.5rem', borderRadius: '6px' }}>
+                    <iframe ref={snakeRef} src="https://scratch.mit.edu/projects/226445813/embed" title="Snake!" allowtransparency="true" width="485" height="402" frameBorder="0" scrolling="no" allowFullScreen style={{ width: '100%', height: '420px', border: 'none' }} />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="muted" style={{ marginBottom: '0.5rem' }}>Locked — redeem 50 points to unlock this game.</div>
+                    <button
+                      className="btn btn-success"
+                      style={{ width: '100%', cursor: availablePoints < 50 ? 'not-allowed' : 'pointer' }}
+                      onClick={() => redeemPointsForGame('Snake!')}
+                      disabled={availablePoints < 50}
+                      title={availablePoints < 50 ? 'Need 50 available points to unlock' : 'Unlock for 50 pts'}
+                    >
+                      Unlock for 50 pts
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -22,6 +22,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .date-btn:hover { background: #eff6ff; }
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.65rem 1rem; border-radius: 999px; background: #2563eb; color: white; border: none; cursor: pointer; font-weight: 700; transition: transform 0.15s ease, background-color 0.15s ease; }
 .btn:hover { transform: translateY(-1px); }
+.btn:disabled,
+.btn[disabled] {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
 .btn-reset-today { background: linear-gradient(135deg, #fb923c, #f97316); color: white; border: none; box-shadow: 0 10px 22px rgba(251, 146, 60, 0.2); }
 .btn-reset-today:hover { background: linear-gradient(135deg, #f97316, #ef4444); }
 .date-pills { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.5rem; flex: 1; }

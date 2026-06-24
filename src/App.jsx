@@ -90,36 +90,37 @@ function App() {
   const snakeRef = useRef(null)
 
   const getDefaultTasks = () => [
-    { id: 1, title: 'Water The Plants', points: 10, description: 'Give the plants a good drink.', completedDates: [] },
-    { id: 2, title: 'Drink 3 Bottles Of Water', points: 10, description: 'Stay hydrated all day.', completedDates: [] },
-    { id: 23, title: 'Brush Twice Daily', points: 10, description: 'Brush teeth twice daily, morning and night.', completedDates: [] },
-    { id: 3, title: 'Do Yoga', points: 10, description: 'Stretch, breathe and relax with yoga.', completedDates: [] },
-    { id: 28, title: 'Read 5 Pages in a book', points: 10, description: 'Read 3-5 pages from a book.', completedDates: [] },
-    { id: 4, title: 'Do Piano', points: 10, description: 'Practice piano pieces and scales.', completedDates: [] },
-    { id: 5, title: 'Practice 1 Music Song', points: 10, description: 'Practice one music song to improve voice and rhythm.', completedDates: [] },
-    { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 10, description: 'Chant 1 Bhagavad-gita sloka for daily practice.', completedDates: [] },
-    { id: 7, title: 'Chant 2 Prajna Prayers', points: 15, description: 'Chant 2 Prajna prayers for daily practice.', completedDates: [] },
-    { id: 8, title: 'Do 3x3 Cube', points: 10, description: 'Practice 3x3 cube speed solving.', completedDates: [] },
-    { id: 9, title: 'Do 4x4 Cube', points: 15, description: 'Practice 4x4 cube solving.', completedDates: [] },
-    { id: 10, title: 'Do Maths Worksheet', points: 15, description: 'Finish one maths worksheet.', completedDates: [] },
-    { id: 11, title: 'Do Xtra Math', points: 10, description: 'Solve Xtra maths questions.', completedDates: [] },
-    { id: 12, title: 'Do IXL Math', points: 10, description: 'Practice IXL Math problems.', completedDates: [] },
-    { id: 13, title: 'Do IXL Language Arts', points: 10, description: 'Practice IXL Language Arts.', completedDates: [] },
-    { id: 14, title: 'Do IXL Science', points: 10, description: 'Practice IXL Science.', completedDates: [] },
-    { id: 15, title: 'Do IXL Social Studies', points: 15, description: 'Practice IXL Social Studies.', completedDates: [] },
-    { id: 16, title: 'Write An English Story', points: 15, description: 'Write a creative short story in English.', completedDates: [] },
-    { id: 17, title: 'Write A Telugu Story', points: 15, description: 'Write a creative short story in Telugu.', completedDates: [] },
-    { id: 18, title: 'Do Drawing', points: 10, description: 'Draw something creative.', completedDates: [] },
-    { id: 19, title: 'Play Chess', points: 10, description: 'Study chess moves and practice.', completedDates: [] },
-    { id: 20, title: 'Play Basketball', points: 10, description: 'Play a fun sport session.', completedDates: [] },
-    { id: 21, title: 'Play Badminton', points: 10, description: 'Play a fun sport session.', completedDates: [] },
-    { id: 24, title: 'Practice Dance', points: 10, description: 'Practice dance routine or exercises.', completedDates: [] },
-    { id: 25, title: 'Go For A Walk', points: 15, description: 'Go for a walk outside for exercise and fresh air.', completedDates: [] },
-    { id: 26, title: 'Ride Bicycle', points: 15, description: 'Ride bicycle for exercise.', completedDates: [] },
-    { id: 27, title: 'Do Meditation', points: 10, description: 'Practice meditation for 10 minutes.', completedDates: [] },
-    { id: 22, title: 'Help In The Kitchen', points: 10, description: 'Assist with cooking or cleaning.', completedDates: [] },
-    { id: 28, title: 'Do 3 MashUp Puzzles', points: 10, description: 'Do 3 MashUp Puzzles.', completedDates: [] },
-    { id: 29, title: 'Do Japa Chanting', points: 15, description: 'Practice japa chanting meditation for spiritual growth.', completedDates: [] }
+    { id: 1, title: 'Water The Plants', points: 5, description: 'Give the plants a good drink.', completedDates: [] },
+    { id: 2, title: 'Drink 3 Bottles Of Water', points: 5, description: 'Stay hydrated all day.', completedDates: [] },
+    { id: 23, title: 'Brush Twice Daily', points: 5, description: 'Brush teeth twice daily, morning and night.', completedDates: [] },
+    { id: 3, title: 'Do Yoga', points: 5, description: 'Stretch, breathe and relax with yoga.', completedDates: [] },
+    { id: 28, title: 'Read 5 Pages in a book', points: 5, description: 'Read 3-5 pages from a book.', parentPresence: true, completedDates: [] },
+    { id: 4, title: 'Do Piano', points: 5, description: 'Practice piano pieces and scales.', completedDates: [] },
+    { id: 5, title: 'Practice 1 Music Song', points: 5, description: 'Practice one music song to improve voice and rhythm.', parentPresence: true, completedDates: [] },
+    { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 5, description: 'Chant 1 Bhagavad-gita sloka for daily practice.', parentPresence: true, completedDates: [] },
+    { id: 7, title: 'Chant 2 Prajna Prayers', points: 5, description: 'Chant 2 Prajna prayers for daily practice.', parentPresence: true, completedDates: [] },
+    { id: 8, title: 'Do 3x3 Cube', points: 5, description: 'Practice 3x3 cube speed solving.', completedDates: [] },
+    { id: 9, title: 'Do 4x4 Cube', points: 5, description: 'Practice 4x4 cube solving.', completedDates: [] },
+    { id: 10, title: 'Do Maths Worksheet', points: 5, description: 'Finish one maths worksheet.', completedDates: [] },
+    { id: 11, title: 'Do Xtra Math', points: 5, description: 'Solve Xtra maths questions.', completedDates: [] },
+    { id: 12, title: 'Do IXL Math', points: 5, description: 'Practice IXL Math problems.', completedDates: [] },
+    { id: 13, title: 'Do IXL Language Arts', points: 5, description: 'Practice IXL Language Arts.', completedDates: [] },
+    { id: 14, title: 'Do IXL Science', points: 5, description: 'Practice IXL Science.', parentPresence: true, completedDates: [] },
+    { id: 15, title: 'Do IXL Social Studies', points: 5, description: 'Practice IXL Social Studies.', parentPresence: true, completedDates: [] },
+    { id: 16, title: 'Write An English Story', points: 5, description: 'Write a creative short story in English.', parentPresence: true, completedDates: [] },
+    { id: 17, title: 'Write A Telugu Story', points: 5, description: 'Write a creative short story in Telugu.', parentPresence: true, completedDates: [] },
+    { id: 18, title: 'Do Drawing', points: 5, description: 'Draw something creative.', completedDates: [] },
+    { id: 19, title: 'Play Chess', points: 5, description: 'Study chess moves and practice.', completedDates: [] },
+    { id: 20, title: 'Play Basketball', points: 5, description: 'Play a fun sport session.', completedDates: [] },
+    { id: 21, title: 'Play Badminton', points: 5, description: 'Play a fun sport session.', parentPresence: true, completedDates: [] },
+    { id: 24, title: 'Practice Dance', points: 5, description: 'Practice dance routine or exercises.', parentPresence: true, completedDates: [] },
+    { id: 25, title: 'Go For A Walk', points: 5, description: 'Go for a walk outside for exercise and fresh air.', parentPresence: true, completedDates: [] },
+    { id: 26, title: 'Ride Bicycle', points: 5, description: 'Ride bicycle for exercise.', parentPresence: true, completedDates: [] },
+    { id: 27, title: 'Do Meditation', points: 5, description: 'Practice meditation for 10 minutes.', completedDates: [] },
+    { id: 22, title: 'Help In The Kitchen', points: 5, description: 'Assist with cooking or cleaning.', parentPresence: true, completedDates: [] },
+    { id: 31, title: 'Do 3 MashUp Puzzles', points: 5, description: 'Do 3 MashUp Puzzles.', parentPresence: true, completedDates: [] },
+    { id: 29, title: 'Do Japa Chanting', points: 5, description: 'Practice japa chanting meditation for spiritual growth.', completedDates: [] },
+    { id: 30, title: 'Feed Food To Fish', points: 5, description: 'Feed food to the fish.', completedDates: [] }
   ]
 
   // Generate stable incremental IDs stored in localStorage
@@ -472,7 +473,12 @@ function App() {
             {tasks.map(t => (
               <div key={t.id} className={`task task-card ${isDone(t, date) ? 'task-done' : ''}`}>
                 <div>
-                  <div className="task-title">{formatTaskTitle(t.title)}</div>
+                  <div className="task-title">
+                    {formatTaskTitle(t.title)}
+                    {t.parentPresence && (
+                      <span className="parent-icon" title="Do this task in a parent's presence" aria-label="Do this task in a parent's presence">👨‍👩‍👧</span>
+                    )}
+                  </div>
                   <div className="muted">{t.description}</div>
                 </div>
                 <div className="task-right">

@@ -54,6 +54,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 }
 .task-card { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
 .task-title { font-weight: 700; margin-bottom: 0.1rem; font-size: 0.95rem; }
+.parent-icon { margin-left: 0.4rem; font-size: 1rem; cursor: help; vertical-align: middle; }
 .task-badge { display: inline-flex; align-items: center; justify-content: center; margin-bottom: 0.25rem; padding: 0.3rem 0.65rem; border-radius: 999px; background: #ede9fe; color: #7c3aed; font-weight: 700; font-size: 0.82rem; }
 .task-right { display: flex; align-items: center; gap: 0.65rem; }
 .toggle-switch { width: 3rem; height: 1.6rem; border-radius: 999px; background: #cbd5e1; border: none; position: relative; cursor: pointer; transition: background-color 0.2s ease; }

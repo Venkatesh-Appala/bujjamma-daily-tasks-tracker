@@ -92,15 +92,15 @@ function App() {
 
   const getDefaultTasks = () => [
     { id: 1, title: 'Water The Plants', points: 5, description: 'Give the plants a good drink.', completedDates: [] },
-    { id: 2, title: 'Drink 3 Bottles Of Water', points: 5, description: 'Stay hydrated all day.', completedDates: [] },
-    { id: 23, title: 'Brush Twice Daily', points: 5, description: 'Brush teeth Admorning and night.', completedDates: [] },
-    { id: 3, title: 'Do Yoga', points: 5, description: 'Stretch, breathe and relax with yoga.', completedDates: [] },
-    { id: 28, title: 'Read 5 Pages in a book', points: 5, description: 'Read 3-5 pages from a book.', parentPresence: true, completedDates: [] },
+    { id: 2, title: 'Drink 3 Bottles Of Water', points: 5, description: 'Stay hydrated all day.', required: true, completedDates: [] },
+    { id: 23, title: 'Brush Twice Daily', points: 5, description: 'Brush teeth Admorning and night.', required: true, completedDates: [] },
+    { id: 3, title: 'Do Yoga', points: 5, description: 'Stretch, breathe and relax with yoga.', required: true, completedDates: [] },
+    { id: 28, title: 'Read 5 Pages in a English book', points: 5, description: 'Read 3-5 pages from a book.', required: true, parentPresence: true, completedDates: [] },
     { id: 4, title: 'Do Piano', points: 5, description: 'Practice piano pieces and scales.', completedDates: [] },
     { id: 5, title: 'Practice 1 Music Song', points: 5, description: 'Practice 1 song to improve voice.', parentPresence: true, completedDates: [] },
     { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 5, description: 'Chant 1 Bhagavad-gita sloka.', parentPresence: true, completedDates: [] },
     { id: 7, title: 'Chant 2 Prajna Prayers', points: 5, description: 'Chant 2 Prajna prayers.', parentPresence: true, completedDates: [] },
-    { id: 8, title: 'Do 3x3 Cube', points: 3, description: 'Practice 3x3 cube speed solving.', completedDates: [] },
+    { id: 8, title: 'Do 3x3 Cube', points: 3, description: 'Practice 3x3 cube speed solving.', required: true, completedDates: [] },
     { id: 9, title: 'Do 4x4 Cube', points: 5, description: 'Practice 4x4 cube solving.', completedDates: [] },
     { id: 10, title: 'Do Maths Worksheet', points: 5, description: 'Finish one maths worksheet.', completedDates: [] },
     { id: 11, title: 'Do Xtra Math', points: 5, description: 'Solve Xtra maths questions.', completedDates: [] },
@@ -121,7 +121,7 @@ function App() {
     { id: 22, title: 'Help In The Kitchen', points: 5, description: 'Assist with cooking or cleaning.', parentPresence: true, completedDates: [] },
     { id: 31, title: 'Do 3 MashUp Puzzles', points: 5, description: 'Do 3 MashUp Puzzles.', parentPresence: true, completedDates: [] },
     { id: 29, title: 'Do Japa Chanting', points: 5, description: 'Do japa chanting for spiritual growth.', completedDates: [] },
-    { id: 30, title: 'Feed Food To Fish', points: 2, description: 'Feed food to the fish.', completedDates: [] }
+    { id: 30, title: 'Feed Food To Fish', points: 2, description: 'Feed food to the fish.', required: true, completedDates: [] }
   ]
 
   // Generate stable incremental IDs stored in localStorage
@@ -381,6 +381,18 @@ function App() {
   const availablePoints = totalPoints - spentPoints
   const completedCount = tasks.filter(t => isDone(t, date)).length
   const todaysCash = (pointsEarned / conversionRate).toFixed(2)
+
+  // Three task groups:
+  // - Required: tasks flagged `required`, mandatory every day.
+  // - Missed Yesterday: optional tasks NOT completed on the previous day (now mandatory).
+  // - Optional: remaining optional tasks (either done yesterday or required ones already excluded).
+  const prevDate = addDays(date, -1)
+  const isCarriedOver = t => !t.required && !isDone(t, prevDate)
+  const sortByParent = arr => [...arr].sort((a, b) => (a.parentPresence ? 1 : 0) - (b.parentPresence ? 1 : 0))
+  const requiredTasks = sortByParent(tasks.filter(t => t.required))
+  const missedTasks = sortByParent(tasks.filter(isCarriedOver))
+  const optionalTasks = sortByParent(tasks.filter(t => !t.required && !isCarriedOver(t)))
+  const doneIn = arr => arr.filter(t => isDone(t, date)).length
   const totalCash = (totalPoints / conversionRate).toFixed(2)
 
   // Aggregate total points earned per day across all tasks (for the Report chart)
@@ -394,6 +406,35 @@ function App() {
     .sort()
     .map(d => ({ date: d, points: dailyPointsMap[d] }))
   const maxDailyPoints = dailyPoints.reduce((m, d) => Math.max(m, d.points), 0)
+
+  const renderTaskCard = (t, { missed = false } = {}) => (
+    <div key={t.id} className={`task task-card ${isDone(t, date) ? 'task-done' : ''}`}>
+      <div className="task-main">
+        <div className="task-title">{formatTaskTitle(t.title)}</div>
+        <div className="muted">{t.description}</div>
+        {missed && (
+          <div style={{ marginTop: '0.35rem', display: 'inline-block', fontSize: '0.75rem', fontWeight: 'bold', color: '#b45309', background: '#fef3c7', borderRadius: '999px', padding: '0.15rem 0.6rem' }}>
+            ⚠ Missed yesterday — required today
+          </div>
+        )}
+      </div>
+      <div className="task-right">
+        <div className="task-badge">{t.points || 0} pts</div>
+        <button
+          className={`toggle-switch ${isDone(t, date) ? 'on' : ''}`}
+          onClick={() => toggleTaskForDate(t.id)}
+          aria-label={isDone(t, date) ? 'Mark undone' : 'Mark done'}
+        >
+          <span className="toggle-thumb" />
+        </button>
+      </div>
+      <div className="task-parent-col">
+        {t.parentPresence && (
+          <span className="parent-icon" title="Do this task in a parent's presence" aria-label="Do this task in a parent's presence">👨‍👩‍👧</span>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="container">
@@ -507,31 +548,41 @@ function App() {
             </div>
             <button className="btn btn-danger btn-reset-today" onClick={resetAllForDate}>Reset Today Tasks</button>
           </div>
-          <div className="task-grid">
-            {[...tasks].sort((a, b) => (a.parentPresence ? 1 : 0) - (b.parentPresence ? 1 : 0)).map(t => (
-              <div key={t.id} className={`task task-card ${isDone(t, date) ? 'task-done' : ''}`}>
-                <div className="task-main">
-                  <div className="task-title">{formatTaskTitle(t.title)}</div>
-                  <div className="muted">{t.description}</div>
-                </div>
-                <div className="task-right">
-                  <div className="task-badge">{t.points || 0} pts</div>
-                  <button
-                    className={`toggle-switch ${isDone(t, date) ? 'on' : ''}`}
-                    onClick={() => toggleTaskForDate(t.id)}
-                    aria-label={isDone(t, date) ? 'Mark undone' : 'Mark done'}
-                  >
-                    <span className="toggle-thumb" />
-                  </button>
-                </div>
-                <div className="task-parent-col">
-                  {t.parentPresence && (
-                    <span className="parent-icon" title="Do this task in a parent's presence" aria-label="Do this task in a parent's presence">👨‍👩‍👧</span>
-                  )}
-                </div>
-              </div>
-            ))}
+
+          {/* Required Tasks */}
+          <div className="section-title" style={{ fontSize: '1.05rem', marginBottom: '0.5rem' }}>
+            ⭐ Required <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(requiredTasks)} of {requiredTasks.length} done)</span>
           </div>
+          <div className="muted" style={{ marginBottom: '0.75rem' }}>Must be done every day.</div>
+          <div className="task-grid">
+            {requiredTasks.map(t => renderTaskCard(t))}
+          </div>
+
+          {/* Missed Yesterday Tasks */}
+          <div className="section-title" style={{ fontSize: '1.05rem', margin: '1.5rem 0 0.5rem' }}>
+            ⚠ Missed Yesterday <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(missedTasks)} of {missedTasks.length} done)</span>
+          </div>
+          <div className="muted" style={{ marginBottom: '0.75rem' }}>Optional tasks skipped yesterday — required today.</div>
+          {missedTasks.length === 0 ? (
+            <div className="muted">Nothing was missed yesterday — great job keeping up!</div>
+          ) : (
+            <div className="task-grid">
+              {missedTasks.map(t => renderTaskCard(t, { missed: true }))}
+            </div>
+          )}
+
+          {/* Optional Tasks */}
+          <div className="section-title" style={{ fontSize: '1.05rem', margin: '1.5rem 0 0.5rem' }}>
+            ✨ Optional <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(optionalTasks)} of {optionalTasks.length} done)</span>
+          </div>
+          <div className="muted" style={{ marginBottom: '0.75rem' }}>Nice to do. Skip one and it becomes required the next day.</div>
+          {optionalTasks.length === 0 ? (
+            <div className="muted">No optional tasks remaining today.</div>
+          ) : (
+            <div className="task-grid">
+              {optionalTasks.map(t => renderTaskCard(t))}
+            </div>
+          )}
           </>
         )}
 

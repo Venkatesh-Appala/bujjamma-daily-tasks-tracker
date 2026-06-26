@@ -81,6 +81,9 @@ function App() {
   // Child profiles (name/age). One child today; the shape supports several later.
   const [children, setChildren] = useState([])
   const [activeChildId, setActiveChildId] = useState(null)
+  // Kid Details form is edited locally and only persisted on Save.
+  const [childForm, setChildForm] = useState({ name: '', age: '' })
+  const [detailsSaved, setDetailsSaved] = useState(false)
 
   // Cloud-sync bookkeeping. cloudRecordRef holds the last full document so writes
   // preserve fields/other children we don't actively edit. canSyncRef gates writes
@@ -512,9 +515,46 @@ function App() {
 
   const activeChild = children.find(c => c.id === activeChildId) || null
   const childName = (activeChild && activeChild.name && activeChild.name.trim()) || ''
-  const updateActiveChild = (field, value) => {
-    setChildren(cs => cs.map(c => (c.id === activeChildId ? { ...c, [field]: value } : c)))
+
+  // Switch the active kid: repoint the tasks view to that kid's saved progress
+  // (task definitions stay the same; only completion + spent points change).
+  const selectChild = childId => {
+    const prog = (cloudRecordRef.current.progress || {})[childId] || {}
+    const cmap = prog.completedDates || {}
+    setActiveChildId(childId)
+    setTasks(ts => ts.map(t => ({ ...t, completedDates: cmap[t.id] || [] })))
+    setSpentPoints(Number(prog.spentPoints) || 0)
   }
+
+  // Add a new kid (blank details + empty progress) and switch to them.
+  const addChild = () => {
+    const id =
+      typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `child-${Date.now()}`
+    setChildren(cs => [...cs, { id, name: '', age: '' }])
+    setActiveChildId(id)
+    setTasks(ts => ts.map(t => ({ ...t, completedDates: [] })))
+    setSpentPoints(0)
+    setActiveTab('kids')
+  }
+
+  // Persist the edited name/age (form is local until this is clicked).
+  const saveChildDetails = () => {
+    setChildren(cs =>
+      cs.map(c =>
+        c.id === activeChildId ? { ...c, name: childForm.name.trim(), age: childForm.age } : c
+      )
+    )
+    setDetailsSaved(true)
+  }
+
+  // Populate the details form whenever the active kid changes.
+  useEffect(() => {
+    if (activeChild) {
+      setChildForm({ name: activeChild.name || '', age: activeChild.age ?? '' })
+      setDetailsSaved(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChildId])
 
   const conversionRate = 100 // 100 points = $1
   const pointsEarned = tasks.reduce((sum, t) => (isDone(t, date) ? sum + (t.points || 0) : sum), 0)
@@ -585,6 +625,30 @@ function App() {
             <div className="hero-title">
               <h1>{childName ? `${childName}'s Daily Tasks Tracker` : 'Bujjamma Daily Tasks Tracker'}</h1>
               <p className="muted">Choose a date, complete your tasks, and earn points for every good action.</p>
+              {children.length > 0 && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="muted">👧 Kid:</span>
+                  <select
+                    value={activeChildId || ''}
+                    onChange={e => selectChild(e.target.value)}
+                    style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.95rem' }}
+                  >
+                    {children.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {(c.name && c.name.trim()) || 'Unnamed kid'}
+                        {c.age ? ` (age ${c.age})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn btn-muted"
+                    onClick={addChild}
+                    style={{ padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.9rem' }}
+                  >
+                    + Add Kid
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="hero-tasklist">
@@ -837,9 +901,12 @@ function App() {
                   <span className="muted">Name</span>
                   <input
                     type="text"
-                    value={activeChild.name || ''}
+                    value={childForm.name}
                     placeholder="Enter child's name"
-                    onChange={e => updateActiveChild('name', e.target.value)}
+                    onChange={e => {
+                      setChildForm(f => ({ ...f, name: e.target.value }))
+                      setDetailsSaved(false)
+                    }}
                     style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
                   />
                 </label>
@@ -849,15 +916,35 @@ function App() {
                     type="number"
                     min="1"
                     max="25"
-                    value={activeChild.age ?? ''}
+                    value={childForm.age}
                     placeholder="Enter age"
-                    onChange={e => updateActiveChild('age', e.target.value)}
+                    onChange={e => {
+                      setChildForm(f => ({ ...f, age: e.target.value }))
+                      setDetailsSaved(false)
+                    }}
                     style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
                   />
                 </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <button
+                    className="btn"
+                    onClick={saveChildDetails}
+                    style={{ backgroundColor: '#9C27B0', color: '#fff', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="btn btn-muted"
+                    onClick={addChild}
+                    style={{ padding: '0.6rem 1.25rem', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    + Add Another Kid
+                  </button>
+                  {detailsSaved && <span style={{ color: '#22c55e', fontWeight: 'bold' }}>✓ Saved</span>}
+                </div>
                 <div className="muted" style={{ fontSize: '0.85rem' }}>
                   {SYNC_ENABLED
-                    ? '✓ Saved automatically to the cloud and synced across devices.'
+                    ? 'Saved to the cloud and synced across devices.'
                     : '⚠ Cloud sync is off — details are saved on this device only.'}
                 </div>
               </div>

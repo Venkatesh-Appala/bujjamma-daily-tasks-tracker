@@ -911,7 +911,7 @@ function App() {
               <div style={{ fontWeight: 700, color: '#1f2937', textAlign: 'center', marginBottom: '0.25rem' }}>➕ Add a Parent</div>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>Parent name</span>
-                <input type="text" value={parentForm.name} placeholder="e.g. Mom, Dad, Venkatesh" autoFocus onChange={e => setParentForm(f => ({ ...f, name: e.target.value }))} style={fieldStyle} />
+                <input type="text" value={parentForm.name} placeholder="e.g. Mom, Dad, Grandma" autoFocus onChange={e => setParentForm(f => ({ ...f, name: e.target.value }))} style={fieldStyle} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>PIN (4 digits — optional)</span>

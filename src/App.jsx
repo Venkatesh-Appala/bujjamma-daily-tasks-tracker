@@ -64,6 +64,26 @@ function formatTaskTitle(title) {
     .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
 }
 
+// Editable task list fetched at runtime. Edit/commit tasks.json on GitHub and the
+// live app picks up the change on next load — no rebuild or redeploy needed.
+// (raw.githubusercontent.com is CDN-cached, so edits can take a few minutes to appear.)
+const TASKS_URL =
+  'https://raw.githubusercontent.com/Venkatesh-Appala/bujjamma-daily-tasks-tracker/main/tasks.json'
+
+// Reconcile task definitions (title/points/description/required/parentPresence) from
+// `defaults` with the per-day completion tracking kept in `stored`, matched by stable id.
+function reconcileTasks(defaults, stored) {
+  return [
+    ...stored.map(p => {
+      const def = defaults.find(d => d.id === p.id)
+      return def
+        ? { ...def, completedDates: p.completedDates ?? [], done: p.done }
+        : p // custom task not in defaults — leave untouched
+    }),
+    ...defaults.filter(d => !stored.some(p => p.id === d.id))
+  ]
+}
+
 function App() {
   const [tasks, setTasks] = useState([])
   const [date, setDate] = useState(todayISO())
@@ -155,40 +175,53 @@ function App() {
   }
 
   useEffect(() => {
-    const stored = localStorage.getItem('tasks')
-    const defaults = getDefaultTasks()
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          // Reconcile on load: definition fields (title/description/points/parentPresence)
-          // always come from code defaults, while tracking (completedDates) is kept from
-          // storage. Matched by stable `id`, so editing task text redeploys to all devices
-          // without losing completion history.
-          const merged = [
-            ...parsed.map(p => {
-              const def = defaults.find(d => d.id === p.id)
-              return def
-                ? { ...def, completedDates: p.completedDates ?? [], done: p.done }
-                : p // custom task not in defaults — leave untouched
-            }),
-            ...defaults.filter(d => !parsed.some(p => p.id === d.id))
-          ]
-          setTasks(merged)
-          // ensure nextTaskId is initialized
-          if (!localStorage.getItem('nextTaskId')) {
-            const maxId = merged.reduce((m, t) => Math.max(m, t.id), 0)
-            localStorage.setItem('nextTaskId', String(maxId + 1))
+    let cancelled = false
+
+    // Apply a set of task definitions: reconcile with stored completion tracking
+    // if present, otherwise seed from the definitions directly.
+    const applyDefaults = defaults => {
+      if (cancelled) return
+      const stored = localStorage.getItem('tasks')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed)) {
+            // Definition fields always come from the (remote or fallback) defaults,
+            // while tracking (completedDates) is kept from storage. Matched by stable
+            // `id`, so editing task text updates all devices without losing history.
+            const merged = reconcileTasks(defaults, parsed)
+            setTasks(merged)
+            // ensure nextTaskId is initialized
+            if (!localStorage.getItem('nextTaskId')) {
+              const maxId = merged.reduce((m, t) => Math.max(m, t.id), 0)
+              localStorage.setItem('nextTaskId', String(maxId + 1))
+            }
+            return
           }
-          return
+        } catch (error) {
+          console.warn('Invalid saved tasks, resetting sample tasks', error)
         }
-      } catch (error) {
-        console.warn('Invalid saved tasks, resetting sample tasks', error)
       }
+      setTasks(defaults)
+      const maxId = defaults.reduce((m, t) => Math.max(m, t.id), 0)
+      localStorage.setItem('nextTaskId', String(maxId + 1))
     }
-    setTasks(defaults)
-    const maxId = defaults.reduce((m, t) => Math.max(m, t.id), 0)
-    localStorage.setItem('nextTaskId', String(maxId + 1))
+
+    // Fetch the editable task list from GitHub; fall back to the bundled defaults
+    // if the network/file is unavailable (offline, rate-limited, etc.).
+    fetch(TASKS_URL, { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status))))
+      .then(remote => {
+        applyDefaults(Array.isArray(remote) && remote.length > 0 ? remote : getDefaultTasks())
+      })
+      .catch(error => {
+        console.warn('Could not load remote tasks.json, using bundled fallback', error)
+        applyDefaults(getDefaultTasks())
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Load spent points from localStorage

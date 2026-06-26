@@ -4,8 +4,8 @@
 // progress, so the portal can be opened from any device and show the same data.
 //
 // Credentials come from Vite env vars (VITE_JSONBIN_*) so the access key is not
-// committed to the repo. See .env.example for the variable names. If the vars are
-// missing the app silently falls back to localStorage-only (no cross-device sync).
+// committed to the repo. See .env.example for the variable names. The bin is the
+// single source of truth — if the vars are missing, the app has no persistence.
 
 const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID
 const ACCESS_KEY = import.meta.env.VITE_JSONBIN_ACCESS_KEY

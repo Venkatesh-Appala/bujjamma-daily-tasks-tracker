@@ -65,11 +65,11 @@ function formatTaskTitle(title) {
     .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
 }
 
-// Editable task list fetched at runtime. Edit/commit tasks.json on GitHub and the
-// live app picks up the change on next load — no rebuild or redeploy needed.
-// (raw.githubusercontent.com is CDN-cached, so edits can take a few minutes to appear.)
-const TASKS_URL =
-  'https://raw.githubusercontent.com/Venkatesh-Appala/bujjamma-daily-tasks-tracker/main/tasks.json'
+function uuid() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `id-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+}
 
 function App() {
   const [tasks, setTasks] = useState([])
@@ -78,14 +78,30 @@ function App() {
   const [unlockedGames, setUnlockedGames] = useState({})
   const [spentPoints, setSpentPoints] = useState(0)
 
-  // Child profiles (name/age). One child today; the shape supports several later.
+  // Parents own a task library and a set of kids. The app is parent-login-first.
+  const [parents, setParents] = useState([])
+  const [activeParentId, setActiveParentId] = useState(null)
+  const [allTasks, setAllTasks] = useState([]) // full task library (all parents)
   const [children, setChildren] = useState([])
   const [activeChildId, setActiveChildId] = useState(null)
-  // Kid Details form is edited locally and only persisted on Save.
-  const [childForm, setChildForm] = useState({ name: '', age: '' })
-  const [detailsSaved, setDetailsSaved] = useState(false)
-  // True while adding a brand-new kid (the kid isn't created until Save).
-  const [addingChild, setAddingChild] = useState(false)
+
+  // Parent login form.
+  const [loginParentId, setLoginParentId] = useState('')
+  const [parentPinInput, setParentPinInput] = useState('')
+  const [parentLoginError, setParentLoginError] = useState('')
+  const [addingParent, setAddingParent] = useState(false)
+  const [parentForm, setParentForm] = useState({ name: '', pin: '' })
+  // Admin is re-locked behind the parent PIN within a session (so a kid using
+  // the tracker can't open it). Unlocked only after the PIN is entered.
+  const [adminUnlocked, setAdminUnlocked] = useState(false)
+  const [adminPinInput, setAdminPinInput] = useState('')
+  const [adminPinError, setAdminPinError] = useState('')
+
+  // PIN gate: when a kid with a PIN is picked, hold their id here until the
+  // correct PIN is entered before actually switching to them.
+  const [pinPromptKidId, setPinPromptKidId] = useState(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
 
   // Cloud-sync bookkeeping. cloudRecordRef holds the last full document so writes
   // preserve fields/other children we don't actively edit. canSyncRef gates writes
@@ -107,106 +123,6 @@ function App() {
   // Bigger game state (grow a box by clicking)
   const [biggerSize, setBiggerSize] = useState(60)
   const [biggerScore, setBiggerScore] = useState(0)
-
-  const getDefaultTasks = () => [
-    { id: 1, title: 'Water The Plants', points: 5, description: 'Give the plants a good drink.', completedDates: [] },
-    { id: 2, title: 'Drink 3 Bottles Of Water', points: 5, description: 'Stay hydrated all day.', required: true, completedDates: [] },
-    { id: 23, title: 'Brush Twice Daily', points: 5, description: 'Brush teeth Admorning and night.', required: true, completedDates: [] },
-    { id: 3, title: 'Do Yoga', points: 5, description: 'Stretch, breathe and relax with yoga.', required: true, completedDates: [] },
-    { id: 28, title: 'Read 5 Pages in a English book', points: 5, description: 'Read 3-5 pages from a book.', required: true, parentPresence: true, completedDates: [] },
-    { id: 4, title: 'Do Piano', points: 5, description: 'Practice piano pieces and scales.', completedDates: [] },
-    { id: 5, title: 'Practice 1 Music Song', points: 5, description: 'Practice 1 song to improve voice.', parentPresence: true, completedDates: [] },
-    { id: 6, title: 'Chant 1 Bhagavad Gita Sloka', points: 5, description: 'Chant 1 Bhagavad-gita sloka.', parentPresence: true, completedDates: [] },
-    { id: 7, title: 'Chant 2 Prajna Prayers', points: 5, description: 'Chant 2 Prajna prayers.', parentPresence: true, completedDates: [] },
-    { id: 8, title: 'Do 3x3 Cube', points: 3, description: 'Practice 3x3 cube speed solving.', required: true, completedDates: [] },
-    { id: 9, title: 'Do 4x4 Cube', points: 5, description: 'Practice 4x4 cube solving.', completedDates: [] },
-    { id: 10, title: 'Do Maths Worksheet', points: 5, description: 'Finish one maths worksheet.', completedDates: [] },
-    { id: 11, title: 'Do Xtra Math', points: 5, description: 'Solve Xtra maths questions.', completedDates: [] },
-    { id: 12, title: 'Do IXL Math', points: 5, description: 'Practice IXL Math problems.', completedDates: [] },
-    { id: 13, title: 'Do IXL Language Arts', points: 5, description: 'Practice IXL Language Arts.', completedDates: [] },
-    { id: 14, title: 'Do IXL Science', points: 5, description: 'Practice IXL Science.', parentPresence: true, completedDates: [] },
-    { id: 15, title: 'Do IXL Social Studies', points: 5, description: 'Practice IXL Social Studies.', parentPresence: true, completedDates: [] },
-    { id: 16, title: 'Write An English Story', points: 5, description: 'Write a creative short story in English.', parentPresence: true, completedDates: [] },
-    { id: 17, title: 'Write A Telugu Story', points: 5, description: 'Write a creative short story in Telugu.', parentPresence: true, completedDates: [] },
-    { id: 18, title: 'Do Drawing', points: 5, description: 'Draw something creative.', completedDates: [] },
-    { id: 19, title: 'Play Chess', points: 5, description: 'Study chess moves and practice.', completedDates: [] },
-    { id: 20, title: 'Play Basketball', points: 5, description: 'Play a fun sport session.', completedDates: [] },
-    { id: 21, title: 'Play Badminton', points: 5, description: 'Play a fun sport session.', parentPresence: true, completedDates: [] },
-    { id: 24, title: 'Practice Dance', points: 5, description: 'Practice dance routine or exercises.', parentPresence: true, completedDates: [] },
-    { id: 25, title: 'Go For A Walk', points: 5, description: 'Go for a walk outside for fresh air.', parentPresence: true, completedDates: [] },
-    { id: 26, title: 'Ride Bicycle', points: 5, description: 'Ride bicycle for exercise.', parentPresence: true, completedDates: [] },
-    { id: 27, title: 'Do Meditation', points: 5, description: 'Practice meditation for 10 minutes.', completedDates: [] },
-    { id: 22, title: 'Help In The Kitchen', points: 5, description: 'Assist with cooking or cleaning.', parentPresence: true, completedDates: [] },
-    { id: 31, title: 'Do 3 MashUp Puzzles', points: 5, description: 'Do 3 MashUp Puzzles.', parentPresence: true, completedDates: [] },
-    { id: 29, title: 'Do Japa Chanting', points: 5, description: 'Do japa chanting for spiritual growth.', completedDates: [] },
-    { id: 30, title: 'Feed Food To Fish', points: 2, description: 'Feed food to the fish.', required: true, completedDates: [] }
-  ]
-
-  // Generate stable incremental IDs stored in localStorage
-  const nextId = () => {
-    const key = 'nextTaskId'
-    let id = Number(localStorage.getItem(key))
-    if (!id || id <= 0) {
-      const defaults = getDefaultTasks()
-      const stored = localStorage.getItem('tasks')
-      let maxId = defaults.reduce((m, t) => Math.max(m, t.id), 0)
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            maxId = Math.max(maxId, ...parsed.map(p => p.id))
-          }
-        } catch (e) {}
-      }
-      id = maxId + 1
-      localStorage.setItem(key, String(id + 1))
-      return id
-    }
-    localStorage.setItem(key, String(id + 1))
-    return id
-  }
-
-  // Add a new task at runtime (preserves existing tasks)
-  const addTask = newTask => {
-    const id = newTask.id ?? nextId()
-    const taskWithId = { id, completedDates: [], ...newTask }
-    setTasks(ts => {
-      const updated = [...ts, taskWithId]
-      localStorage.setItem('tasks', JSON.stringify(updated))
-      return updated
-    })
-  }
-
-  // Read this device's existing completion history out of localStorage as a
-  // { [taskId]: dates[] } map (used for offline use and first-run cloud migration).
-  const readLocalCompletion = () => {
-    const map = {}
-    const stored = localStorage.getItem('tasks')
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          parsed.forEach(p => {
-            if (Array.isArray(p.completedDates) && p.completedDates.length) map[p.id] = p.completedDates
-          })
-        }
-      } catch (error) {
-        console.warn('Invalid saved tasks in storage', error)
-      }
-    }
-    return map
-  }
-
-  const unionDates = (a = [], b = []) => Array.from(new Set([...a, ...b])).sort()
-
-  // Collect the active child's completion history from the live `tasks` array.
-  const completionFromTasks = ts => {
-    const map = {}
-    ts.forEach(t => {
-      if (Array.isArray(t.completedDates) && t.completedDates.length) map[t.id] = t.completedDates
-    })
-    return map
-  }
 
   // Snapshot the score metrics so they're readable directly from the bin. These
   // are derived from completedDates + spentPoints; `todayScore` is for the actual
@@ -233,87 +149,34 @@ function App() {
     let cancelled = false
 
     const init = async () => {
-      // 1. Task definitions: remote tasks.json with the bundled list as fallback.
-      let defaults = getDefaultTasks()
-      try {
-        const res = await fetch(TASKS_URL, { cache: 'no-store' })
-        if (res.ok) {
-          const remote = await res.json()
-          if (Array.isArray(remote) && remote.length > 0) defaults = remote
-        }
-      } catch (error) {
-        console.warn('Could not load remote tasks.json, using bundled fallback', error)
-      }
-      if (cancelled) return
-
-      // 2. This device's existing progress (for migration + offline).
-      const localMap = readLocalCompletion()
-      const localSpent = Number(localStorage.getItem('spentPoints')) || 0
-
-      // 3. Cloud progress + child profiles.
-      let kids = []
-      let activeId = null
-      let cloudMap = {}
-      let cloudSpent = null
+      // The cloud (JSONBin) holds everything: parents, the task library, kids,
+      // and per-kid progress. Nothing is auto-selected — the app starts at the
+      // parent login screen.
+      let record = null
       if (SYNC_ENABLED) {
         try {
-          const record = await fetchCloud()
+          record = await fetchCloud()
           canSyncRef.current = true // read succeeded — safe to write back
-          if (record && typeof record === 'object') {
-            cloudRecordRef.current = record
-            kids = Array.isArray(record.children) ? record.children : []
-            activeId = record.activeChildId || (kids[0] && kids[0].id) || null
-            const prog = activeId && record.progress ? record.progress[activeId] : null
-            if (prog) {
-              cloudMap = prog.completedDates || {}
-              cloudSpent = Number(prog.spentPoints) || 0
-            }
-          }
+          if (record && typeof record === 'object') cloudRecordRef.current = record
         } catch (error) {
           // Couldn't read the cloud — stay read-only this session so we don't
-          // overwrite good cloud data with local-only state.
-          console.warn('Could not load cloud data, using local only', error)
+          // overwrite good cloud data. With no local cache, nothing loads until
+          // the connection is back.
+          console.warn('Could not load cloud data', error)
         }
       }
       if (cancelled) return
 
-      // 4. First run (no child yet): seed one from this device's data. Name/age
-      //    are left blank for the parent to fill in the Kids tab.
-      if (!activeId) {
-        activeId = 'child-1'
-        kids = [{ id: activeId, name: '', age: '' }]
-      }
-
-      // 5. Merge completion (union → never lose history) onto the definitions.
-      const ids = new Set([...Object.keys(localMap), ...Object.keys(cloudMap)])
-      const mergedMap = {}
-      ids.forEach(id => {
-        mergedMap[id] = unionDates(localMap[id], cloudMap[id])
-      })
-      const mergedTasks = defaults.map(d => ({ ...d, completedDates: mergedMap[d.id] || [] }))
-      const mergedSpent = cloudSpent != null ? Math.max(cloudSpent, localSpent) : localSpent
-
-      setChildren(kids)
-      setActiveChildId(activeId)
-      setTasks(mergedTasks)
-      setSpentPoints(mergedSpent)
-
-      // If the active kid has no name yet (e.g. this device already tracked
-      // progress before profiles existed), guide the user straight to naming
-      // that existing profile rather than letting them create a new empty kid.
-      const activeKidObj = kids.find(k => k.id === activeId)
-      if (!activeKidObj || !(activeKidObj.name && activeKidObj.name.trim())) {
-        setActiveTab('kids')
-      }
-
-      if (!localStorage.getItem('nextTaskId')) {
-        const maxId = defaults.reduce((m, t) => Math.max(m, t.id), 0)
-        localStorage.setItem('nextTaskId', String(maxId + 1))
-      }
-
-      // The debounced save effect below picks up these state changes and pushes
-      // the merged state to the cloud — that is what migrates an already-tracking
-      // device's localStorage history up to JSONBin on first run.
+      setParents(record && Array.isArray(record.parents) ? record.parents : [])
+      // Drop the legacy `required` flag — all tasks are daily/required now.
+      setAllTasks(
+        (record && Array.isArray(record.tasks) ? record.tasks : []).map(({ required, ...t }) => t)
+      )
+      setChildren(record && Array.isArray(record.children) ? record.children : [])
+      setActiveParentId(null)
+      setActiveChildId(null)
+      setTasks([])
+      setSpentPoints(0)
     }
 
     init()
@@ -327,51 +190,39 @@ function App() {
   // within the free request quota. Gated on canSyncRef so a failed initial read
   // never clobbers existing cloud data.
   useEffect(() => {
-    if (!SYNC_ENABLED || !canSyncRef.current || !activeChildId) return
+    if (!SYNC_ENABLED || !canSyncRef.current) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
       const prev = cloudRecordRef.current || {}
-      const record = {
-        ...prev,
-        children,
-        activeChildId,
-        progress: {
-          ...(prev.progress || {}),
-          [activeChildId]: {
-            completedDates: completionFromTasks(tasks),
-            spentPoints,
-            stats: computeStats(tasks, spentPoints)
-          }
+      const progress = { ...(prev.progress || {}) }
+      if (activeChildId) {
+        // Update the active kid's completion. Keep history for any task that is
+        // not currently in their assigned view (so un-assigning then re-assigning
+        // a task doesn't lose its past completions).
+        const newDates = { ...(progress[activeChildId]?.completedDates || {}) }
+        tasks.forEach(t => {
+          if (Array.isArray(t.completedDates) && t.completedDates.length) newDates[t.id] = t.completedDates
+          else delete newDates[t.id]
+        })
+        progress[activeChildId] = {
+          completedDates: newDates,
+          spentPoints,
+          stats: computeStats(tasks, spentPoints)
         }
       }
+      const record = { ...prev, parents, tasks: allTasks, children, progress }
       cloudRecordRef.current = record
       pushCloud(record).catch(error => console.warn('Cloud sync failed', error))
     }, 1500)
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [tasks, spentPoints, children, activeChildId])
+  }, [tasks, spentPoints, children, activeChildId, parents, allTasks])
 
-  // Load spent points from localStorage
+  // Games start locked each session; unlock via redeemPointsForGame.
   useEffect(() => {
-    const stored = localStorage.getItem('spentPoints')
-    if (stored) {
-      setSpentPoints(Number(stored))
-    }
-    // start locked by default; unlock via redeemPointsForGame
     setUnlockedGames({})
   }, [])
-
-  useEffect(() => {
-    if (tasks.length > 0) {
-      localStorage.setItem('tasks', JSON.stringify(tasks))
-    }
-  }, [tasks])
-
-  // Save spent points to localStorage
-  useEffect(() => {
-    localStorage.setItem('spentPoints', String(spentPoints))
-  }, [spentPoints])
 
   const isDone = (task, dateStr) => {
     if (!task) return false
@@ -523,73 +374,221 @@ function App() {
     setTictacToeWinner(null)
   }
 
+  const activeParent = parents.find(p => p.id === activeParentId) || null
   const activeChild = children.find(c => c.id === activeChildId) || null
   const childName = (activeChild && activeChild.name && activeChild.name.trim()) || ''
+  // Kids and task library scoped to the logged-in parent.
+  const parentChildren = children.filter(c => c.parentId === activeParentId)
+  const parentTaskLibrary = allTasks.filter(t => t.parentId === activeParentId)
   // Only kids with a name appear in the selector (no "Unnamed kid" entries).
-  const namedChildren = children.filter(c => c.name && c.name.trim())
+  const namedChildren = parentChildren.filter(c => c.name && c.name.trim())
 
-  // Switch the active kid: repoint the tasks view to that kid's saved progress
-  // (task definitions stay the same; only completion + spent points change).
+  // ---- Parent login / management ----
+  const loginParent = parentArg => {
+    const p = parentArg || parents.find(x => x.id === loginParentId)
+    if (!p) {
+      setParentLoginError('Please select a parent.')
+      return
+    }
+    if (p.pin && parentPinInput.trim() !== String(p.pin)) {
+      setParentLoginError('Incorrect PIN.')
+      return
+    }
+    setActiveParentId(p.id)
+    setParentPinInput('')
+    setParentLoginError('')
+    setActiveChildId(null)
+    setTasks([])
+    setSpentPoints(0)
+    setActiveTab('tasks')
+    // Admin starts locked each login; the parent PIN unlocks it. A parent with
+    // no PIN has nothing to verify, so Admin is open for them.
+    setAdminUnlocked(!p.pin)
+    setAdminPinInput('')
+    setAdminPinError('')
+  }
+
+  // Pick a parent on the login screen: log in immediately if no PIN, else
+  // select them and reveal the PIN field.
+  const pickParent = p => {
+    setParentLoginError('')
+    setParentPinInput('')
+    setLoginParentId(p.id)
+    if (!p.pin) loginParent(p)
+  }
+
+  const submitAdminPin = () => {
+    if (activeParent && adminPinInput.trim() === String(activeParent.pin)) {
+      setAdminUnlocked(true)
+      setAdminPinInput('')
+      setAdminPinError('')
+    } else {
+      setAdminPinError('Incorrect PIN. Try again.')
+    }
+  }
+
+  const logoutParent = () => {
+    setActiveParentId(null)
+    setActiveChildId(null)
+    setTasks([])
+    setSpentPoints(0)
+    setLoginParentId('')
+    setParentPinInput('')
+    setActiveTab('tasks')
+    setAdminUnlocked(false)
+    setAdminPinInput('')
+    setAdminPinError('')
+  }
+
+  const addParent = () => {
+    const name = parentForm.name.trim()
+    const pin = (parentForm.pin || '').trim()
+    if (!name) {
+      alert('Please enter the parent name.')
+      return
+    }
+    if (pin && !/^\d{4}$/.test(pin)) {
+      alert('PIN must be 4 digits (or left blank for no lock).')
+      return
+    }
+    const id = uuid()
+    setParents(ps => [...ps, { id, name, pin }])
+    setParentForm({ name: '', pin: '' })
+    setAddingParent(false)
+    // Log straight into the new parent's Admin to add kids/tasks.
+    setActiveParentId(id)
+    setActiveChildId(null)
+    setActiveTab('admin')
+    setAdminUnlocked(true)
+  }
+
+  const updateActiveParent = patch =>
+    setParents(ps => ps.map(p => (p.id === activeParentId ? { ...p, ...patch } : p)))
+
+  // Remove the logged-in parent and everything they own (kids, tasks, progress),
+  // then return to the login screen.
+  const removeActiveParent = () => {
+    if (!activeParent) return
+    if (
+      !window.confirm(
+        `Remove parent "${activeParent.name}" and ALL their kids, tasks and progress? This cannot be undone.`
+      )
+    )
+      return
+    const kidIds = children.filter(c => c.parentId === activeParentId).map(c => c.id)
+    // Drop the removed kids' progress so it doesn't linger in the bin.
+    const prev = cloudRecordRef.current || {}
+    const newProgress = { ...(prev.progress || {}) }
+    kidIds.forEach(id => delete newProgress[id])
+    cloudRecordRef.current = { ...prev, progress: newProgress }
+    setParents(ps => ps.filter(p => p.id !== activeParentId))
+    setChildren(cs => cs.filter(c => c.parentId !== activeParentId))
+    setAllTasks(ts => ts.filter(t => t.parentId !== activeParentId))
+    logoutParent()
+  }
+
+  // ---- Kid selection (PIN-gated) ----
+  const requestSelectChild = childId => {
+    if (!childId) return
+    const kid = children.find(c => c.id === childId)
+    if (kid && kid.pin) {
+      setPinPromptKidId(childId)
+      setPinInput('')
+      setPinError('')
+    } else {
+      selectChild(childId)
+    }
+  }
+
+  const submitPin = () => {
+    const kid = children.find(c => c.id === pinPromptKidId)
+    if (kid && pinInput.trim() === String(kid.pin)) {
+      selectChild(pinPromptKidId)
+      setPinPromptKidId(null)
+      setPinInput('')
+      setPinError('')
+    } else {
+      setPinError('Incorrect PIN. Try again.')
+    }
+  }
+
+  const cancelPin = () => {
+    setPinPromptKidId(null)
+    setPinInput('')
+    setPinError('')
+  }
+
+  // Build the active kid's task view: the parent's tasks assigned to that kid,
+  // overlaid with the kid's saved completion dates.
   const selectChild = childId => {
+    const kid = children.find(c => c.id === childId)
     const prog = (cloudRecordRef.current.progress || {})[childId] || {}
     const cmap = prog.completedDates || {}
+    const taskIds = kid && Array.isArray(kid.taskIds) ? kid.taskIds : []
+    const assigned = allTasks.filter(t => t.parentId === activeParentId && taskIds.includes(t.id))
     setActiveChildId(childId)
-    setTasks(ts => ts.map(t => ({ ...t, completedDates: cmap[t.id] || [] })))
+    setTasks(assigned.map(t => ({ ...t, completedDates: cmap[t.id] || [] })))
     setSpentPoints(Number(prog.spentPoints) || 0)
   }
 
-  // Start adding a new kid: open a blank Kid Details form. The kid is NOT
-  // created here — only when Save is clicked (see saveChildDetails).
-  const addChild = () => {
-    setAddingChild(true)
-    setChildForm({ name: '', age: '' })
-    setDetailsSaved(false)
-    setActiveTab('kids')
+  // ---- Admin: manage kids ----
+  const updateChild = (id, patch) =>
+    setChildren(cs => cs.map(c => (c.id === id ? { ...c, ...patch } : c)))
+
+  const addKidInAdmin = () => {
+    const id = uuid()
+    setChildren(cs => [
+      ...cs,
+      { id, parentId: activeParentId, name: '', age: '', pin: '', taskIds: parentTaskLibrary.map(t => t.id) }
+    ])
   }
 
-  // Cancel adding a new kid and restore the form to the active kid.
-  const cancelAddChild = () => {
-    setAddingChild(false)
-    setChildForm({ name: activeChild?.name || '', age: activeChild?.age ?? '' })
-  }
-
-  // Save the Kid Details form: create the new kid (add mode) or update the
-  // active kid (edit mode). Both persist via the debounced cloud-save effect.
-  const saveChildDetails = () => {
-    const name = childForm.name.trim()
-    if (addingChild) {
-      if (!name) {
-        alert("Please enter the kid's name.")
-        return
-      }
-      const id =
-        typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `child-${Date.now()}`
-      setChildren(cs => [...cs, { id, name, age: childForm.age }])
-      setActiveChildId(id)
-      setTasks(ts => ts.map(t => ({ ...t, completedDates: [] })))
+  const removeKid = id => {
+    if (!window.confirm('Remove this kid and their saved progress?')) return
+    setChildren(cs => cs.filter(c => c.id !== id))
+    if (activeChildId === id) {
+      setActiveChildId(null)
+      setTasks([])
       setSpentPoints(0)
-      setAddingChild(false)
-    } else {
-      setChildren(cs =>
-        cs.map(c => (c.id === activeChildId ? { ...c, name, age: childForm.age } : c))
-      )
     }
-    setDetailsSaved(true)
   }
 
-  // Populate the details form whenever the active kid changes.
-  useEffect(() => {
-    if (activeChild) {
-      setChildForm({ name: activeChild.name || '', age: activeChild.age ?? '' })
-      setDetailsSaved(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChildId])
+  const toggleKidTask = (kidId, taskId) =>
+    setChildren(cs =>
+      cs.map(c => {
+        if (c.id !== kidId) return c
+        const ids = Array.isArray(c.taskIds) ? c.taskIds : []
+        return { ...c, taskIds: ids.includes(taskId) ? ids.filter(x => x !== taskId) : [...ids, taskId] }
+      })
+    )
 
-  // Keep the browser tab title in sync with the selected kid.
+  // ---- Admin: manage the parent's task library ----
+  const updateTaskDef = (id, patch) =>
+    setAllTasks(ts => ts.map(t => (t.id === id ? { ...t, ...patch } : t)))
+
+  const addTaskDef = () => {
+    const maxId = allTasks.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0)
+    const id = maxId + 1
+    setAllTasks(ts => [
+      ...ts,
+      { id, parentId: activeParentId, title: 'New Task', points: 5, description: '', parentPresence: false }
+    ])
+  }
+
+  const removeTaskDef = id => {
+    if (!window.confirm('Remove this task? It will be unassigned from all kids.')) return
+    setAllTasks(ts => ts.filter(t => t.id !== id))
+    setChildren(cs => cs.map(c => ({ ...c, taskIds: (c.taskIds || []).filter(x => x !== id) })))
+  }
+
+  // Keep the browser tab title in sync with the selected kid / parent.
   useEffect(() => {
-    document.title = childName ? `${childName}'s Daily Tasks Tracker` : 'Daily Tasks Tracker'
-  }, [childName])
+    document.title = childName
+      ? `${childName}'s Daily Tasks Tracker`
+      : activeParent
+        ? `${activeParent.name} — Daily Tasks Tracker`
+        : 'Daily Tasks Tracker'
+  }, [childName, activeParent])
 
   const conversionRate = 100 // 100 points = $1
   const pointsEarned = tasks.reduce((sum, t) => (isDone(t, date) ? sum + (t.points || 0) : sum), 0)
@@ -598,16 +597,14 @@ function App() {
   const completedCount = tasks.filter(t => isDone(t, date)).length
   const todaysCash = (pointsEarned / conversionRate).toFixed(2)
 
-  // Three task groups:
-  // - Required: tasks flagged `required`, mandatory every day.
-  // - Missed Yesterday: optional tasks NOT completed on the previous day (now mandatory).
-  // - Optional: remaining optional tasks (either done yesterday or required ones already excluded).
+  // Two task groups (all tasks are daily/required):
+  // - Missed Yesterday: tasks NOT completed on the previous day (highlighted).
+  // - Required: every other task for today.
   const prevDate = addDays(date, -1)
-  const isCarriedOver = t => !t.required && !isDone(t, prevDate)
+  const isCarriedOver = t => !isDone(t, prevDate)
   const sortByParent = arr => [...arr].sort((a, b) => (a.parentPresence ? 1 : 0) - (b.parentPresence ? 1 : 0))
-  const requiredTasks = sortByParent(tasks.filter(t => t.required))
   const missedTasks = sortByParent(tasks.filter(isCarriedOver))
-  const optionalTasks = sortByParent(tasks.filter(t => !t.required && !isCarriedOver(t)))
+  const requiredTasks = sortByParent(tasks.filter(t => !isCarriedOver(t)))
   const doneIn = arr => arr.filter(t => isDone(t, date)).length
   const totalCash = (totalPoints / conversionRate).toFixed(2)
 
@@ -652,20 +649,162 @@ function App() {
     </div>
   )
 
+  const pinPromptKid = children.find(c => c.id === pinPromptKidId) || null
+
+  // ---- Parent login screen (shown until a parent logs in) ----
+  if (!activeParentId) {
+    const loginPick = parents.find(p => p.id === loginParentId) || null
+    const avatarColors = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#ef4444', '#8b5cf6']
+    const fieldStyle = { padding: '0.7rem 0.85rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1rem', outline: 'none', width: '100%', boxSizing: 'border-box' }
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%)' }}>
+        <div style={{ width: '100%', maxWidth: '440px', background: '#fff', borderRadius: '24px', padding: '2.5rem 2rem', boxShadow: '0 24px 70px rgba(0,0,0,0.32)', textAlign: 'center' }}>
+          <div style={{ width: '76px', height: '76px', margin: '0 auto 0.85rem', borderRadius: '22px', background: 'linear-gradient(135deg, #6366f1, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.4rem', boxShadow: '0 10px 24px rgba(99,102,241,0.4)' }}>⭐</div>
+          <h1 style={{ margin: '0 0 0.25rem', fontSize: '1.6rem', color: '#1f2937' }}>Daily Tasks Tracker</h1>
+          <p style={{ margin: '0 0 1.9rem', color: '#6b7280' }}>Build great habits, earn rewards 🎉</p>
+
+          {addingParent ? (
+            <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ fontWeight: 700, color: '#1f2937', textAlign: 'center', marginBottom: '0.25rem' }}>➕ Add a Parent</div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>Parent name</span>
+                <input type="text" value={parentForm.name} placeholder="e.g. Mom, Dad, Venkatesh" autoFocus onChange={e => setParentForm(f => ({ ...f, name: e.target.value }))} style={fieldStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>PIN (4 digits — optional)</span>
+                <input type="password" inputMode="numeric" maxLength={4} value={parentForm.pin} placeholder="Leave blank for no PIN" onChange={e => setParentForm(f => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))} style={fieldStyle} />
+              </label>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <button onClick={addParent} style={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                  Create &amp; Continue
+                </button>
+                <button onClick={() => { setAddingParent(false); setParentForm({ name: '', pin: '' }) }} style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '0.75rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 600 }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {parents.length === 0 ? (
+                <p style={{ color: '#6b7280', marginBottom: '1.25rem' }}>No parents yet — add the first one to get started.</p>
+              ) : (
+                <>
+                  <div style={{ color: '#374151', fontWeight: 700, marginBottom: '1rem' }}>Who's managing today?</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', marginBottom: '1.25rem' }}>
+                    {parents.map((p, i) => {
+                      const selected = p.id === loginParentId
+                      const color = avatarColors[i % avatarColors.length]
+                      return (
+                        <button key={p.id} onClick={() => pickParent(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', background: 'none', border: 'none', cursor: 'pointer', width: '88px' }}>
+                          <div style={{ width: '66px', height: '66px', borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.7rem', fontWeight: 'bold', boxShadow: selected ? `0 0 0 4px #fff, 0 0 0 7px ${color}` : '0 6px 14px rgba(0,0,0,0.18)', transition: 'box-shadow 0.15s' }}>
+                            {(p.name || '?').trim().charAt(0).toUpperCase() || '?'}
+                          </div>
+                          <span style={{ fontSize: '0.85rem', color: selected ? '#1f2937' : '#6b7280', fontWeight: selected ? 700 : 500, maxWidth: '88px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {loginPick && loginPick.pin && (
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <div style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '0.6rem' }}>🔒 Enter PIN for {loginPick.name}</div>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        autoFocus
+                        value={parentPinInput}
+                        onChange={e => { setParentPinInput(e.target.value.replace(/\D/g, '').slice(0, 4)); setParentLoginError('') }}
+                        onKeyDown={e => e.key === 'Enter' && loginParent()}
+                        style={{ width: '170px', padding: '0.7rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.6rem', outline: 'none' }}
+                      />
+                      <div>
+                        <button onClick={() => loginParent()} style={{ marginTop: '0.9rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', padding: '0.7rem 2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                          Login →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {parentLoginError && <div style={{ color: '#dc2626', fontSize: '0.9rem', marginBottom: '0.75rem' }}>{parentLoginError}</div>}
+                </>
+              )}
+              <button onClick={() => setAddingParent(true)} style={{ marginTop: '0.85rem', background: 'none', border: '2px dashed #d1d5db', color: '#6b7280', padding: '0.65rem 1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 600 }}>
+                + Add Parent
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="container">
+      {pinPromptKid && (
+        <div
+          onClick={cancelPin}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '12px', padding: '1.5rem', width: '320px', maxWidth: '90vw', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
+          >
+            <div className="section-title" style={{ marginBottom: '0.25rem' }}>🔒 Enter PIN</div>
+            <div className="muted" style={{ marginBottom: '1rem' }}>
+              Enter the 4-digit PIN for {pinPromptKid.name}.
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              value={pinInput}
+              onChange={e => {
+                setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))
+                setPinError('')
+              }}
+              onKeyDown={e => e.key === 'Enter' && submitPin()}
+              style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1.25rem', textAlign: 'center', letterSpacing: '0.5rem', boxSizing: 'border-box' }}
+            />
+            {pinError && <div style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '0.5rem' }}>{pinError}</div>}
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+              <button
+                onClick={submitPin}
+                style={{ flex: 1, backgroundColor: '#9C27B0', color: '#fff', border: 'none', padding: '0.6rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Unlock
+              </button>
+              <button
+                onClick={cancelPin}
+                className="btn btn-muted"
+                style={{ flex: 1, padding: '0.6rem', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sticky-panel">
         <div className="hero">
           <div className="hero-top">
             <div className="hero-title">
               <h1>{childName ? `${childName}'s Daily Tasks Tracker` : 'Daily Tasks Tracker'}</h1>
               <p className="muted">Choose a date, complete your tasks, and earn points for every good action.</p>
-              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span className="muted">👤 {activeParent ? activeParent.name : ''}</span>
+                <button
+                  className="btn btn-muted"
+                  onClick={logoutParent}
+                  style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', fontSize: '0.85rem' }}
+                >
+                  Logout
+                </button>
+                <span style={{ color: '#ddd' }}>|</span>
                 <span className="muted">👧 Kid:</span>
                 {namedChildren.length > 0 ? (
                   <select
                     value={namedChildren.some(c => c.id === activeChildId) ? activeChildId : ''}
-                    onChange={e => selectChild(e.target.value)}
+                    onChange={e => requestSelectChild(e.target.value)}
                     style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.95rem' }}
                   >
                     {!namedChildren.some(c => c.id === activeChildId) && <option value="">Select a kid…</option>}
@@ -677,15 +816,8 @@ function App() {
                     ))}
                   </select>
                 ) : (
-                  <span className="muted">none yet — add one in Kid Details</span>
+                  <span className="muted">none yet — add one in Admin</span>
                 )}
-                <button
-                  className="btn btn-muted"
-                  onClick={addChild}
-                  style={{ padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.9rem' }}
-                >
-                  + Add Kid
-                </button>
               </div>
             </div>
 
@@ -762,19 +894,19 @@ function App() {
             📊 Report
           </button>
           <button
-            className={`btn ${activeTab === 'kids' ? '' : 'btn-muted'}`}
+            className={`btn ${activeTab === 'admin' ? '' : 'btn-muted'}`}
             style={{
-              backgroundColor: activeTab === 'kids' ? '#9C27B0' : '#f5f5f5',
-              color: activeTab === 'kids' ? '#fff' : '#333',
+              backgroundColor: activeTab === 'admin' ? '#9C27B0' : '#f5f5f5',
+              color: activeTab === 'admin' ? '#fff' : '#333',
               border: 'none',
               padding: '0.75rem 1.5rem',
               borderRadius: '4px',
               cursor: 'pointer',
-              fontWeight: activeTab === 'kids' ? 'bold' : 'normal'
+              fontWeight: activeTab === 'admin' ? 'bold' : 'normal'
             }}
-            onClick={() => setActiveTab('kids')}
+            onClick={() => setActiveTab('admin')}
           >
-            👧 Kid Details
+            ⚙️ Admin
           </button>
           <div className="score-card score-line score-card-tabs" style={{ marginLeft: 'auto' }}>
             <div>
@@ -796,8 +928,21 @@ function App() {
           </div>
         </div>
 
+        {/* No kid selected yet — prompt to pick one before showing tasks */}
+        {activeTab === 'tasks' && !activeChildId && (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👧</div>
+            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Select a kid to begin</div>
+            <div className="muted">
+              {namedChildren.length > 0
+                ? 'Choose a kid from the “👧 Kid:” selector at the top to view and track their tasks.'
+                : 'No kids yet — go to the ⚙️ Admin tab to add a kid and assign tasks.'}
+            </div>
+          </div>
+        )}
+
         {/* Tasks Tab */}
-        {activeTab === 'tasks' && (
+        {activeTab === 'tasks' && activeChildId && (
           <>
           <div className="card-header" style={{ marginBottom: '1rem' }}>
             <div>
@@ -826,19 +971,6 @@ function App() {
           ) : (
             <div className="task-grid">
               {missedTasks.map(t => renderTaskCard(t, { missed: true }))}
-            </div>
-          )}
-
-          {/* Optional Tasks */}
-          <div className="section-title" style={{ fontSize: '1.05rem', margin: '1.5rem 0 0.5rem' }}>
-            ✨ Optional <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(optionalTasks)} of {optionalTasks.length} done)</span>
-          </div>
-          <div className="muted" style={{ marginBottom: '0.75rem' }}>Nice to do. Skip one and it becomes required the next day.</div>
-          {optionalTasks.length === 0 ? (
-            <div className="muted">No optional tasks remaining today.</div>
-          ) : (
-            <div className="task-grid">
-              {optionalTasks.map(t => renderTaskCard(t))}
             </div>
           )}
           </>
@@ -926,79 +1058,147 @@ function App() {
           </div>
         )}
 
-        {/* Kid Details Tab */}
-        {activeTab === 'kids' && (
-          <div>
-            <div className="section-title" style={{ marginBottom: '0.25rem' }}>
-              {addingChild ? '➕ Add a New Kid' : '👧 Kid Details'}
-            </div>
+        {/* Admin Tab — locked behind the parent PIN */}
+        {activeTab === 'admin' && !adminUnlocked && (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', maxWidth: '320px', margin: '0 auto' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
+            <div className="section-title" style={{ marginBottom: '0.5rem' }}>Admin is locked</div>
             <div className="muted" style={{ marginBottom: '1.25rem' }}>
-              {addingChild
-                ? "Enter the new kid's name and age, then click Save to add them."
-                : "Update the child's name and age. These sync across devices along with their progress."}
+              Enter {activeParent ? activeParent.name + "'s" : 'the'} parent PIN to manage kids and tasks.
             </div>
-            {addingChild || activeChild ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '420px' }}>
-                {!addingChild && activeChild && !(activeChild.name && activeChild.name.trim()) && (
-                  <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.9rem' }}>
-                    👋 This is your profile with your saved progress. Add your name below and click <strong>Save</strong> to sync it across devices. (Don't use “+ Add Kid” — that starts a new, empty profile.)
-                  </div>
-                )}
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <span className="muted">Name</span>
-                  <input
-                    type="text"
-                    value={childForm.name}
-                    placeholder="Enter child's name"
-                    onChange={e => {
-                      setChildForm(f => ({ ...f, name: e.target.value }))
-                      setDetailsSaved(false)
-                    }}
-                    style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
-                  />
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              value={adminPinInput}
+              onChange={e => { setAdminPinInput(e.target.value.replace(/\D/g, '').slice(0, 4)); setAdminPinError('') }}
+              onKeyDown={e => e.key === 'Enter' && submitAdminPin()}
+              style={{ width: '170px', padding: '0.7rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.6rem', outline: 'none' }}
+            />
+            {adminPinError && <div style={{ color: '#dc2626', fontSize: '0.9rem', marginTop: '0.6rem' }}>{adminPinError}</div>}
+            <div>
+              <button onClick={submitAdminPin} style={{ marginTop: '1rem', background: 'linear-gradient(135deg, #9C27B0, #6366f1)', color: '#fff', border: 'none', padding: '0.7rem 2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                Unlock
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Tab: manage kids (+ task assignment) and the task library */}
+        {activeTab === 'admin' && adminUnlocked && (
+          <div>
+            {/* ---- Parent settings ---- */}
+            <div className="section-title" style={{ marginBottom: '0.75rem' }}>👤 Parent</div>
+            {activeParent && (
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '2rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '2 1 200px' }}>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>Name</span>
+                  <input type="text" value={activeParent.name || ''} onChange={e => updateActiveParent({ name: e.target.value })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
                 </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <span className="muted">Age</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="25"
-                    value={childForm.age}
-                    placeholder="Enter age"
-                    onChange={e => {
-                      setChildForm(f => ({ ...f, age: e.target.value }))
-                      setDetailsSaved(false)
-                    }}
-                    style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
-                  />
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '1 1 140px' }}>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>PIN (4 digits)</span>
+                  <input type="text" inputMode="numeric" maxLength={4} value={activeParent.pin || ''} placeholder="optional" onChange={e => updateActiveParent({ pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
                 </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <button
-                    className="btn"
-                    onClick={saveChildDetails}
-                    style={{ backgroundColor: '#9C27B0', color: '#fff', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    Save
-                  </button>
-                  {addingChild && (
-                    <button
-                      className="btn btn-muted"
-                      onClick={cancelAddChild}
-                      style={{ padding: '0.6rem 1.25rem', borderRadius: '6px', cursor: 'pointer' }}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  {detailsSaved && !addingChild && <span style={{ color: '#22c55e', fontWeight: 'bold' }}>✓ Saved</span>}
-                </div>
-                <div className="muted" style={{ fontSize: '0.85rem' }}>
-                  {SYNC_ENABLED
-                    ? 'Saved to the cloud and synced across devices.'
-                    : '⚠ Cloud sync is off — details are saved on this device only.'}
-                </div>
+                <button className="btn btn-danger" onClick={removeActiveParent} style={{ padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer' }}>
+                  Remove Parent
+                </button>
               </div>
+            )}
+
+            {/* ---- Manage Kids ---- */}
+            <div className="card-header" style={{ marginBottom: '0.75rem' }}>
+              <div className="section-title">👧 Manage Kids</div>
+              <button className="btn" onClick={addKidInAdmin} style={{ backgroundColor: '#9C27B0', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                + Add Kid
+              </button>
+            </div>
+            <div className="muted" style={{ marginBottom: '1rem' }}>
+              Edit each kid's name, age and PIN, and tick which tasks they get. Changes save automatically.
+            </div>
+            {parentChildren.length === 0 ? (
+              <div className="muted" style={{ marginBottom: '2rem' }}>No kids yet — click “+ Add Kid”.</div>
             ) : (
-              <div className="muted">Loading…</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                {parentChildren.map(kid => (
+                  <div key={kid.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '2 1 160px' }}>
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>Name</span>
+                        <input type="text" value={kid.name || ''} placeholder="Kid's name" onChange={e => updateChild(kid.id, { name: e.target.value })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '1 1 80px' }}>
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>Age</span>
+                        <input type="number" min="1" max="25" value={kid.age ?? ''} placeholder="Age" onChange={e => updateChild(kid.id, { age: e.target.value })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '1 1 100px' }}>
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>PIN (4 digits)</span>
+                        <input type="text" inputMode="numeric" maxLength={4} value={kid.pin || ''} placeholder="optional" onChange={e => updateChild(kid.id, { pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                      </label>
+                      <button className="btn btn-danger" onClick={() => removeKid(kid.id)} style={{ padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer' }}>
+                        Remove
+                      </button>
+                    </div>
+                    <div style={{ marginTop: '0.85rem' }}>
+                      <div className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                        Assigned tasks ({(kid.taskIds || []).length} of {parentTaskLibrary.length})
+                      </div>
+                      {parentTaskLibrary.length === 0 ? (
+                        <div className="muted" style={{ fontSize: '0.85rem' }}>No tasks in the library yet — add some below.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1rem' }}>
+                          {parentTaskLibrary.map(t => (
+                            <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.9rem', flex: '1 1 220px' }}>
+                              <input type="checkbox" checked={(kid.taskIds || []).includes(t.id)} onChange={() => toggleKidTask(kid.id, t.id)} />
+                              {formatTaskTitle(t.title)}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ---- Manage Task Library ---- */}
+            <div className="card-header" style={{ marginBottom: '0.75rem' }}>
+              <div className="section-title">📋 Task Library</div>
+              <button className="btn" onClick={addTaskDef} style={{ backgroundColor: '#2196F3', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                + Add Task
+              </button>
+            </div>
+            <div className="muted" style={{ marginBottom: '1rem' }}>
+              These tasks belong to {activeParent ? activeParent.name : 'this parent'}. Assign them to kids above.
+            </div>
+            {parentTaskLibrary.length === 0 ? (
+              <div className="muted">No tasks yet — click “+ Add Task”.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {parentTaskLibrary.map(t => (
+                  <div key={t.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '0.85rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '2 1 180px' }}>
+                      <span className="muted" style={{ fontSize: '0.8rem' }}>Title</span>
+                      <input type="text" value={t.title || ''} onChange={e => updateTaskDef(t.id, { title: e.target.value })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '1 1 70px' }}>
+                      <span className="muted" style={{ fontSize: '0.8rem' }}>Points</span>
+                      <input type="number" min="0" value={t.points ?? 0} onChange={e => updateTaskDef(t.id, { points: Number(e.target.value) || 0 })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: '3 1 220px' }}>
+                      <span className="muted" style={{ fontSize: '0.8rem' }}>Description</span>
+                      <input type="text" value={t.description || ''} onChange={e => updateTaskDef(t.id, { description: e.target.value })} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #ccc' }} />
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem' }}>
+                      <input type="checkbox" checked={!!t.parentPresence} onChange={e => updateTaskDef(t.id, { parentPresence: e.target.checked })} />
+                      Parent present
+                    </label>
+                    <button className="btn btn-danger" onClick={() => removeTaskDef(t.id)} style={{ padding: '0.5rem 0.9rem', borderRadius: '6px', cursor: 'pointer' }}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

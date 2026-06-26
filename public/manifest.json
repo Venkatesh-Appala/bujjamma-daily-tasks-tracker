@@ -1,6 +1,6 @@
 {
-  "name": "Bujjamma Daily Tasks Tracker",
-  "short_name": "Bujjamma Tasks",
+  "name": "Daily Tasks Tracker",
+  "short_name": "Daily Tasks",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -1,4 +1,4 @@
-# Bujjamma Daily Tasks Tracker (SPA)
+# Daily Tasks Tracker (SPA)
 
 Simple single-page app scaffold (React + Vite + PWA).
 

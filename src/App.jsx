@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { SYNC_ENABLED, fetchCloud, pushCloud } from './sync'
 
 function toISODate(date) {
@@ -107,6 +107,74 @@ function mergeCollection(baseline, current, theirs, idKey = 'id') {
 const GAME_MINUTES = 5
 const GAME_DURATION_MS = GAME_MINUTES * 60 * 1000
 
+// Encouraging messages shown when a kid completes a task.
+const CELEBRATION_MESSAGES = [
+  'Excellent!', 'Terrific!', 'Wonderful!', 'Good job!', 'Amazing!', 'Awesome!',
+  'Fantastic!', 'Well done!', 'Superstar!', 'You rock!', 'Brilliant!', 'Way to go!',
+  'Keep it up!', 'Great work!', 'Bravo!'
+]
+
+// Full-screen celebration: a pop-in message + confetti raining from the top.
+function Celebration({ data }) {
+  const pieces = useMemo(() => {
+    const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#eab308']
+    return Array.from({ length: 70 }, () => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 0.5,
+      duration: 1.6 + Math.random() * 1.3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: 6 + Math.random() * 9,
+      round: Math.random() > 0.5
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <div className="celebration" aria-hidden="true">
+      <div className="celebration-backdrop" />
+      {pieces.map((p, i) => (
+        <div
+          key={i}
+          className="confetti-piece"
+          style={{
+            left: `${p.left}%`,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            background: p.color,
+            borderRadius: p.round ? '50%' : '2px',
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`
+          }}
+        />
+      ))}
+      <div className="celebration-msg">{data.msg}</div>
+    </div>
+  )
+}
+
+// Game preview image with graceful fallback: og:image → screenshot → emoji.
+function GameThumb({ game }) {
+  const candidates = [game.thumbnail, game.screenshot].filter(Boolean)
+  const [stage, setStage] = useState(0)
+  const src = candidates[stage]
+  const base = { width: '100%', height: '130px', borderRadius: '8px', marginBottom: '0.5rem' }
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={game.name}
+        loading="lazy"
+        onError={() => setStage(s => s + 1)}
+        style={{ ...base, objectFit: 'cover' }}
+      />
+    )
+  }
+  return (
+    <div style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3.5rem', background: '#f3f4f6' }}>
+      {game.emoji || '🎮'}
+    </div>
+  )
+}
+
 function App() {
   const [tasks, setTasks] = useState([])
   const [date, setDate] = useState(todayISO())
@@ -116,6 +184,9 @@ function App() {
   const [unlockedGames, setUnlockedGames] = useState({})
   const [now, setNow] = useState(() => Date.now())
   const [spentPoints, setSpentPoints] = useState(0)
+  // Celebration shown when a task is marked complete: { msg, key } or null.
+  const [celebration, setCelebration] = useState(null)
+  const celebrationTimerRef = useRef(null)
 
   // Parents own a task library and a set of kids. The app is parent-login-first.
   const [parents, setParents] = useState([])
@@ -136,6 +207,8 @@ function App() {
   const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [adminPinInput, setAdminPinInput] = useState('')
   const [adminPinError, setAdminPinError] = useState('')
+  // Collapsible Admin sections (Task Library / Game Links).
+  const [collapsed, setCollapsed] = useState({ kids: true, tasks: true, games: true })
 
   // PIN gate: when a kid with a PIN is picked, hold their id here until the
   // correct PIN is entered before actually switching to them.
@@ -296,6 +369,40 @@ function App() {
     return () => clearInterval(id)
   }, [activeTab])
 
+  // Lazily fetch a preview for games that don't have one yet, one at a time, and
+  // cache it on the game so we only fetch once. We store both the og:image
+  // (`thumbnail`, nicest when it loads) and a microlink-hosted screenshot
+  // (`screenshot`, reliable fallback). The card tries thumbnail → screenshot → emoji.
+  useEffect(() => {
+    if (activeTab !== 'games' || !SYNC_ENABLED) return
+    const pending = allGames.find(
+      g => g.parentId === activeParentId && g.url && g.screenshot === undefined
+    )
+    if (!pending) return
+    let cancelled = false
+    ;(async () => {
+      let thumb = ''
+      let shot = ''
+      try {
+        const res = await fetch(
+          `https://api.microlink.io/?url=${encodeURIComponent(pending.url)}&screenshot=true`
+        )
+        const json = await res.json()
+        if (json && json.status === 'success' && json.data) {
+          thumb = (json.data.image && json.data.image.url) || (json.data.logo && json.data.logo.url) || ''
+          shot = (json.data.screenshot && json.data.screenshot.url) || ''
+        }
+      } catch (error) {
+        console.warn('Thumbnail fetch failed', error)
+      }
+      if (cancelled) return
+      setAllGames(gs => gs.map(g => (g.id === pending.id ? { ...g, thumbnail: thumb, screenshot: shot } : g)))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, allGames, activeParentId])
+
   const isDone = (task, dateStr) => {
     if (!task) return false
     if (Array.isArray(task.completedDates)) return task.completedDates.includes(dateStr)
@@ -303,7 +410,17 @@ function App() {
     return !!task.done
   }
 
+  // Show an encouraging message + confetti.
+  const celebrate = () => {
+    const msg = CELEBRATION_MESSAGES[Math.floor(Math.random() * CELEBRATION_MESSAGES.length)]
+    setCelebration({ msg, key: Date.now() })
+    if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current)
+    celebrationTimerRef.current = setTimeout(() => setCelebration(null), 2200)
+  }
+
   const toggleTaskForDate = id => {
+    const target = tasks.find(t => t.id === id)
+    const willComplete = target && !isDone(target, date) // marking done (not undoing)
     setTasks(ts =>
       ts.map(t => {
         if (t.id !== id) return t
@@ -314,6 +431,7 @@ function App() {
         return { ...t, completedDates: dates }
       })
     )
+    if (willComplete) celebrate()
   }
 
   const resetAllForDate = () => {
@@ -698,6 +816,8 @@ function App() {
     setAllGames(gs => gs.filter(g => g.id !== id))
   }
 
+  const toggleSection = key => setCollapsed(c => ({ ...c, [key]: !c[key] }))
+
   // Keep the browser tab title in sync with the selected kid / parent.
   useEffect(() => {
     document.title = childName
@@ -714,27 +834,32 @@ function App() {
   const completedCount = tasks.filter(t => isDone(t, date)).length
   const todaysCash = (pointsEarned / conversionRate).toFixed(2)
 
-  // Two task groups (all tasks are daily/required):
-  // - Missed Yesterday: tasks NOT completed on the previous day (highlighted).
-  // - Required: every other task for today.
+  // Group by today's completion: To Do (not done today) and Completed Today.
+  // Items also missed yesterday are flagged (⚠) and floated to the top of To Do.
   const prevDate = addDays(date, -1)
-  const isCarriedOver = t => !isDone(t, prevDate)
+  const wasMissedYesterday = t => !isDone(t, prevDate)
   const sortByParent = arr => [...arr].sort((a, b) => (a.parentPresence ? 1 : 0) - (b.parentPresence ? 1 : 0))
-  const missedTasks = sortByParent(tasks.filter(isCarriedOver))
-  const requiredTasks = sortByParent(tasks.filter(t => !isCarriedOver(t)))
-  const doneIn = arr => arr.filter(t => isDone(t, date)).length
+  const todoTasks = [...tasks.filter(t => !isDone(t, date))].sort((a, b) => {
+    const am = wasMissedYesterday(a) ? 0 : 1
+    const bm = wasMissedYesterday(b) ? 0 : 1
+    if (am !== bm) return am - bm
+    return (a.parentPresence ? 1 : 0) - (b.parentPresence ? 1 : 0)
+  })
+  const completedTasks = sortByParent(tasks.filter(t => isDone(t, date)))
   const totalCash = (totalPoints / conversionRate).toFixed(2)
 
-  // Aggregate total points earned per day across all tasks (for the Report chart)
+  // Aggregate points earned and tasks completed per day (for the Report chart)
   const dailyPointsMap = {}
+  const dailyCountMap = {}
   tasks.forEach(t => {
     (t.completedDates || []).forEach(d => {
       dailyPointsMap[d] = (dailyPointsMap[d] || 0) + (t.points || 0)
+      dailyCountMap[d] = (dailyCountMap[d] || 0) + 1
     })
   })
   const dailyPoints = Object.keys(dailyPointsMap)
     .sort()
-    .map(d => ({ date: d, points: dailyPointsMap[d] }))
+    .map(d => ({ date: d, points: dailyPointsMap[d], count: dailyCountMap[d] || 0 }))
   const maxDailyPoints = dailyPoints.reduce((m, d) => Math.max(m, d.points), 0)
 
   const renderTaskCard = (t, { missed = false } = {}) => (
@@ -856,6 +981,7 @@ function App() {
 
   return (
     <div className="container">
+      {celebration && <Celebration key={celebration.key} data={celebration} />}
       {pinPromptKid && (
         <div
           onClick={cancelPin}
@@ -1069,25 +1195,28 @@ function App() {
             <button className="btn btn-danger btn-reset-today" onClick={resetAllForDate}>Reset Today Tasks</button>
           </div>
 
-          {/* Required Tasks */}
+          {/* To Do */}
           <div className="section-title" style={{ fontSize: '1.05rem', marginBottom: '0.5rem' }}>
-            ⭐ Required <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(requiredTasks)} of {requiredTasks.length} done)</span>
+            📋 To Do <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({todoTasks.length} left)</span>
           </div>
-          <div className="muted" style={{ marginBottom: '0.75rem' }}>Must be done every day.</div>
-          <div className="task-grid">
-            {requiredTasks.map(t => renderTaskCard(t))}
-          </div>
-
-          {/* Missed Yesterday Tasks */}
-          <div className="section-title" style={{ fontSize: '1.05rem', margin: '1.5rem 0 0.5rem' }}>
-            ⚠ Missed Yesterday <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({doneIn(missedTasks)} of {missedTasks.length} done)</span>
-          </div>
-          <div className="muted" style={{ marginBottom: '0.75rem' }}>Optional tasks skipped yesterday — required today.</div>
-          {missedTasks.length === 0 ? (
-            <div className="muted">Nothing was missed yesterday — great job keeping up!</div>
+          <div className="muted" style={{ marginBottom: '0.75rem' }}>Tasks still to complete today.</div>
+          {todoTasks.length === 0 ? (
+            <div className="muted">🎉 All done for today — great job!</div>
           ) : (
             <div className="task-grid">
-              {missedTasks.map(t => renderTaskCard(t, { missed: true }))}
+              {todoTasks.map(t => renderTaskCard(t, { missed: wasMissedYesterday(t) }))}
+            </div>
+          )}
+
+          {/* Completed Today */}
+          <div className="section-title" style={{ fontSize: '1.05rem', margin: '1.5rem 0 0.5rem' }}>
+            ✅ Completed Today <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.9rem' }}>({completedTasks.length})</span>
+          </div>
+          {completedTasks.length === 0 ? (
+            <div className="muted">Nothing completed yet today.</div>
+          ) : (
+            <div className="task-grid">
+              {completedTasks.map(t => renderTaskCard(t))}
             </div>
           )}
           </>
@@ -1111,6 +1240,7 @@ function App() {
                   const ss = Math.floor((remaining % 60000) / 1000)
                   return (
                     <div key={game.id} className="card" style={{ padding: '1rem' }}>
+                      <GameThumb game={game} />
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>
                         <div style={{ fontWeight: 'bold' }}>{game.emoji} {game.name}</div>
                         {everPlayed && (
@@ -1163,14 +1293,14 @@ function App() {
         {/* Report Tab */}
         {activeTab === 'report' && (
           <div>
-            <div className="section-title" style={{ marginBottom: '0.25rem' }}>📊 Points Earned Per Day</div>
-            <div className="muted" style={{ marginBottom: '1.25rem' }}>Total points earned across all tasks, by day.</div>
+            <div className="section-title" style={{ marginBottom: '0.25rem' }}>📊 Points & Tasks Per Day</div>
+            <div className="muted" style={{ marginBottom: '1.25rem' }}>Points earned and tasks completed each day.</div>
             {dailyPoints.length === 0 ? (
               <div className="muted">No completed tasks yet — finish some tasks to see your progress here.</div>
             ) : (
               <div className="bar-chart">
                 {dailyPoints.map(d => (
-                  <div key={d.date} className="bar-col" title={`${d.points} pts on ${d.date}`}>
+                  <div key={d.date} className="bar-col" title={`${d.points} pts · ${d.count} of ${tasks.length} tasks on ${d.date}`}>
                     <div className="bar-value">{d.points}</div>
                     <div className="bar-track">
                       <div
@@ -1178,7 +1308,8 @@ function App() {
                         style={{ height: `${maxDailyPoints ? (d.points / maxDailyPoints) * 100 : 0}%` }}
                       />
                     </div>
-                    <div className="bar-label">{formatDateMonthDay(d.date)}</div>
+                    <div className="bar-label">{formatDateMonthDay(d.date)}, {formatDateYear(d.date)}</div>
+                    <div style={{ fontSize: '0.72rem', textAlign: 'center', fontWeight: 'bold' }}>{d.count}/{tasks.length} tasks</div>
                   </div>
                 ))}
               </div>
@@ -1236,11 +1367,16 @@ function App() {
 
             {/* ---- Manage Kids ---- */}
             <div className="card-header" style={{ marginBottom: '0.75rem' }}>
-              <div className="section-title">👧 Manage Kids</div>
+              <div className="section-title" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSection('kids')}>
+                {collapsed.kids ? '▸' : '▾'} 👧 Manage Kids{' '}
+                <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.85rem' }}>({parentChildren.length})</span>
+              </div>
               <button className="btn" onClick={addKidInAdmin} style={{ backgroundColor: '#9C27B0', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                 + Add Kid
               </button>
             </div>
+            {!collapsed.kids && (
+            <>
             <div className="muted" style={{ marginBottom: '1rem' }}>
               Edit each kid's name, age and PIN, and tick which tasks they get. Changes save automatically.
             </div>
@@ -1288,10 +1424,15 @@ function App() {
                 ))}
               </div>
             )}
+            </>
+            )}
 
             {/* ---- Manage Task Library ---- */}
             <div className="card-header" style={{ marginBottom: '0.75rem' }}>
-              <div className="section-title">📋 Task Library</div>
+              <div className="section-title" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSection('tasks')}>
+                {collapsed.tasks ? '▸' : '▾'} 📋 Task Library{' '}
+                <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.85rem' }}>({parentTaskLibrary.length})</span>
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-muted" onClick={loadStarterTasks} style={{ padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer' }}>
                   Load starter tasks
@@ -1301,6 +1442,8 @@ function App() {
                 </button>
               </div>
             </div>
+            {!collapsed.tasks && (
+            <>
             <div className="muted" style={{ marginBottom: '1rem' }}>
               These tasks belong to {activeParent ? activeParent.name : 'this parent'}. Assign them to kids above.
             </div>
@@ -1333,10 +1476,15 @@ function App() {
                 ))}
               </div>
             )}
+            </>
+            )}
 
             {/* ---- Manage Game Links ---- */}
             <div className="card-header" style={{ margin: '2rem 0 0.75rem' }}>
-              <div className="section-title">🎮 Game Links</div>
+              <div className="section-title" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSection('games')}>
+                {collapsed.games ? '▸' : '▾'} 🎮 Game Links{' '}
+                <span className="muted" style={{ fontWeight: 'normal', fontSize: '0.85rem' }}>({parentGames.length})</span>
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-muted" onClick={loadStarterGames} style={{ padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer' }}>
                   Load starter games
@@ -1346,6 +1494,8 @@ function App() {
                 </button>
               </div>
             </div>
+            {!collapsed.games && (
+            <>
             <div className="muted" style={{ marginBottom: '1rem' }}>
               Games kids can unlock with 50 points. Each opens its link in a new tab.
             </div>
@@ -1373,6 +1523,8 @@ function App() {
                   </div>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
         )}

@@ -203,6 +203,14 @@ function App() {
   const [addingParent, setAddingParent] = useState(false)
   const [parentForm, setParentForm] = useState({ name: '', pin: '' })
   const [showSetupHelp, setShowSetupHelp] = useState(false)
+  // Kid direct-login form (skips the parent PIN — straight to that kid's tasks,
+  // but still scoped to a chosen family so kid lists stay family-private).
+  const [loginChildId, setLoginChildId] = useState('')
+  const [childLoginPinInput, setChildLoginPinInput] = useState('')
+  const [childLoginError, setChildLoginError] = useState('')
+  // True once "Log in as Admin" is clicked within a selected family, revealing
+  // that parent's PIN field (if they have one).
+  const [parentLoginRequested, setParentLoginRequested] = useState(false)
   // Admin is re-locked behind the parent PIN within a session (so a kid using
   // the tracker can't open it). Unlocked only after the PIN is entered.
   const [adminUnlocked, setAdminUnlocked] = useState(false)
@@ -604,13 +612,38 @@ function App() {
     setAdminPinError('')
   }
 
-  // Pick a parent on the login screen: log in immediately if no PIN, else
-  // select them and reveal the PIN field.
-  const pickParent = p => {
+  // Select a family on the login screen — just reveals that family's panel
+  // (kid logins + the parent login option). Does not log anyone in yet.
+  const pickFamily = p => {
+    setLoginParentId(p.id)
+    setParentLoginRequested(false)
+    setParentPinInput('')
+    setParentLoginError('')
+    setLoginChildId('')
+    setChildLoginPinInput('')
+    setChildLoginError('')
+  }
+
+  const backToFamilies = () => {
+    setLoginParentId('')
+    setParentLoginRequested(false)
+    setParentPinInput('')
+    setParentLoginError('')
+    setLoginChildId('')
+    setChildLoginPinInput('')
+    setChildLoginError('')
+  }
+
+  // Within a selected family's panel: start the parent (Admin) login — log in
+  // immediately if no PIN, else reveal the PIN field.
+  const startParentLogin = p => {
     setParentLoginError('')
     setParentPinInput('')
-    setLoginParentId(p.id)
-    if (!p.pin) loginParent(p)
+    if (!p.pin) {
+      loginParent(p)
+    } else {
+      setParentLoginRequested(true)
+    }
   }
 
   const submitAdminPin = () => {
@@ -630,6 +663,9 @@ function App() {
     setSpentPoints(0)
     setLoginParentId('')
     setParentPinInput('')
+    setLoginChildId('')
+    setChildLoginPinInput('')
+    setChildLoginError('')
     setUnlockedGames({})
     setActiveTab('tasks')
     setAdminUnlocked(false)
@@ -716,17 +752,54 @@ function App() {
   }
 
   // Build the active kid's task view: the parent's tasks assigned to that kid,
-  // overlaid with the kid's saved completion dates.
-  const selectChild = childId => {
+  // overlaid with the kid's saved completion dates. `parentIdOverride` is used
+  // when logging in as a kid directly, before activeParentId state has updated.
+  const selectChild = (childId, parentIdOverride) => {
+    const pid = parentIdOverride || activeParentId
     const kid = children.find(c => c.id === childId)
     const prog = (cloudRecordRef.current.progress || {})[childId] || {}
     const cmap = prog.completedDates || {}
     const taskIds = kid && Array.isArray(kid.taskIds) ? kid.taskIds : []
-    const assigned = allTasks.filter(t => t.parentId === activeParentId && taskIds.includes(t.id))
+    const assigned = allTasks.filter(t => t.parentId === pid && taskIds.includes(t.id))
     setActiveChildId(childId)
     setTasks(assigned.map(t => ({ ...t, completedDates: cmap[t.id] || [] })))
     setSpentPoints(Number(prog.spentPoints) || 0)
     setUnlockedGames(prog.unlockedGames || {})
+  }
+
+  // ---- Kid direct login (skips the parent step) ----
+  // Log straight into a kid's tasks. Admin still requires that kid's parent's
+  // PIN to unlock (same rule as logging in via the parent), so "parent login
+  // is only needed for Admin" holds even on this path.
+  const loginAsChild = kid => {
+    const parent = parents.find(p => p.id === kid.parentId) || null
+    setActiveParentId(kid.parentId)
+    selectChild(kid.id, kid.parentId)
+    setAdminUnlocked(!(parent && parent.pin))
+    setAdminPinInput('')
+    setAdminPinError('')
+    setActiveTab('tasks')
+    setLoginChildId('')
+    setChildLoginPinInput('')
+    setChildLoginError('')
+  }
+
+  // Pick a kid on the login screen: log straight in if no PIN, else reveal
+  // the PIN field for that kid.
+  const pickChildLogin = kid => {
+    setChildLoginError('')
+    setChildLoginPinInput('')
+    setLoginChildId(kid.id)
+    if (!kid.pin) loginAsChild(kid)
+  }
+
+  const submitChildLogin = () => {
+    const kid = children.find(c => c.id === loginChildId)
+    if (kid && childLoginPinInput.trim() === String(kid.pin)) {
+      loginAsChild(kid)
+    } else {
+      setChildLoginError('Incorrect PIN. Try again.')
+    }
   }
 
   // ---- Admin: manage kids ----
@@ -897,6 +970,11 @@ function App() {
   // ---- Parent login screen (shown until a parent logs in) ----
   if (!activeParentId) {
     const loginPick = parents.find(p => p.id === loginParentId) || null
+    // Kids belonging to the selected family only — keeps each family's kid
+    // list private until that family is chosen.
+    const familyKids = loginParentId
+      ? children.filter(c => c.parentId === loginParentId && c.name && c.name.trim())
+      : []
     const avatarColors = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#ef4444', '#8b5cf6']
     const fieldStyle = { padding: '0.7rem 0.85rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1rem', outline: 'none', width: '100%', boxSizing: 'border-box' }
     return (
@@ -926,53 +1004,118 @@ function App() {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : !loginParentId ? (
+            // ---- Step 1: pick a family (keeps each family's kids private) ----
             <>
               {parents.length === 0 ? (
                 <p style={{ color: '#6b7280', marginBottom: '1.25rem' }}>No parents yet — add the first one to get started.</p>
               ) : (
                 <>
-                  <div style={{ color: '#374151', fontWeight: 700, marginBottom: '1rem' }}>Who's managing today?</div>
+                  <div style={{ color: '#374151', fontWeight: 700, marginBottom: '1rem' }}>Select your family</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', marginBottom: '1.25rem' }}>
                     {parents.map((p, i) => {
-                      const selected = p.id === loginParentId
                       const color = avatarColors[i % avatarColors.length]
                       return (
-                        <button key={p.id} onClick={() => pickParent(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', background: 'none', border: 'none', cursor: 'pointer', width: '88px' }}>
-                          <div style={{ width: '66px', height: '66px', borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.7rem', fontWeight: 'bold', boxShadow: selected ? `0 0 0 4px #fff, 0 0 0 7px ${color}` : '0 6px 14px rgba(0,0,0,0.18)', transition: 'box-shadow 0.15s' }}>
+                        <button key={p.id} onClick={() => pickFamily(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', background: 'none', border: 'none', cursor: 'pointer', width: '88px' }}>
+                          <div style={{ width: '66px', height: '66px', borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.7rem', fontWeight: 'bold', boxShadow: '0 6px 14px rgba(0,0,0,0.18)' }}>
                             {(p.name || '?').trim().charAt(0).toUpperCase() || '?'}
                           </div>
-                          <span style={{ fontSize: '0.85rem', color: selected ? '#1f2937' : '#6b7280', fontWeight: selected ? 700 : 500, maxWidth: '88px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                          <span style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, maxWidth: '88px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                         </button>
                       )
                     })}
                   </div>
-                  {loginPick && loginPick.pin && (
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '0.6rem' }}>🔒 Enter PIN for {loginPick.name}</div>
-                      <input
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={4}
-                        autoFocus
-                        value={parentPinInput}
-                        onChange={e => { setParentPinInput(e.target.value.replace(/\D/g, '').slice(0, 4)); setParentLoginError('') }}
-                        onKeyDown={e => e.key === 'Enter' && loginParent()}
-                        style={{ width: '170px', padding: '0.7rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.6rem', outline: 'none' }}
-                      />
-                      <div>
-                        <button onClick={() => loginParent()} style={{ marginTop: '0.9rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', padding: '0.7rem 2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
-                          Login →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {parentLoginError && <div style={{ color: '#dc2626', fontSize: '0.9rem', marginBottom: '0.75rem' }}>{parentLoginError}</div>}
                 </>
               )}
               <button onClick={() => setAddingParent(true)} style={{ marginTop: '0.85rem', background: 'none', border: '2px dashed #d1d5db', color: '#6b7280', padding: '0.65rem 1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 600 }}>
                 + Add Parent
               </button>
+            </>
+          ) : (
+            // ---- Step 2: inside the chosen family — kid logins + Admin login ----
+            <>
+              <button onClick={backToFamilies} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', padding: 0, marginBottom: '1rem' }}>
+                ‹ Back to families
+              </button>
+              <div style={{ color: '#374151', fontWeight: 700, marginBottom: '1rem' }}>{loginPick ? `${loginPick.name}'s Family` : 'Family'}</div>
+
+              {familyKids.length > 0 && (
+                <>
+                  <div className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.85rem' }}>👧 Tap your name to start your tasks</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', marginBottom: '1rem' }}>
+                    {familyKids.map((kid, i) => {
+                      const selected = kid.id === loginChildId
+                      const color = avatarColors[(i + 3) % avatarColors.length]
+                      return (
+                        <button key={kid.id} onClick={() => pickChildLogin(kid)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', background: 'none', border: 'none', cursor: 'pointer', width: '88px' }}>
+                          <div style={{ width: '66px', height: '66px', borderRadius: '18px', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.7rem', fontWeight: 'bold', boxShadow: selected ? `0 0 0 4px #fff, 0 0 0 7px ${color}` : '0 6px 14px rgba(0,0,0,0.18)', transition: 'box-shadow 0.15s' }}>
+                            {(kid.name || '?').trim().charAt(0).toUpperCase() || '?'}
+                          </div>
+                          <span style={{ fontSize: '0.85rem', color: selected ? '#1f2937' : '#6b7280', fontWeight: selected ? 700 : 500, maxWidth: '88px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kid.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {loginChildId && children.find(c => c.id === loginChildId)?.pin && (
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <div style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '0.6rem' }}>🔒 Enter your PIN</div>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        autoFocus
+                        value={childLoginPinInput}
+                        onChange={e => { setChildLoginPinInput(e.target.value.replace(/\D/g, '').slice(0, 4)); setChildLoginError('') }}
+                        onKeyDown={e => e.key === 'Enter' && submitChildLogin()}
+                        style={{ width: '170px', padding: '0.7rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.6rem', outline: 'none' }}
+                      />
+                      <div>
+                        <button onClick={submitChildLogin} style={{ marginTop: '0.9rem', background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#fff', border: 'none', padding: '0.7rem 2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                          Start →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {childLoginError && <div style={{ color: '#dc2626', fontSize: '0.9rem', marginBottom: '0.75rem' }}>{childLoginError}</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.5rem 0', color: '#9ca3af', fontSize: '0.8rem' }}>
+                    <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+                    or
+                    <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+                  </div>
+                </>
+              )}
+
+              {familyKids.length === 0 && (
+                <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '1rem' }}>No kids set up yet — log in as Admin to add some.</p>
+              )}
+
+              <button
+                onClick={() => loginPick && startParentLogin(loginPick)}
+                style={{ background: 'none', border: '2px solid #e5e7eb', color: '#374151', padding: '0.65rem 1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}
+              >
+                👤 Log in as {loginPick ? loginPick.name : 'Parent'} (Admin)
+              </button>
+              {parentLoginRequested && loginPick && loginPick.pin && (
+                <div style={{ marginTop: '0.85rem' }}>
+                  <div style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '0.6rem' }}>🔒 Enter PIN for {loginPick.name}</div>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    autoFocus
+                    value={parentPinInput}
+                    onChange={e => { setParentPinInput(e.target.value.replace(/\D/g, '').slice(0, 4)); setParentLoginError('') }}
+                    onKeyDown={e => e.key === 'Enter' && loginParent()}
+                    style={{ width: '170px', padding: '0.7rem', borderRadius: '12px', border: '2px solid #e5e7eb', fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.6rem', outline: 'none' }}
+                  />
+                  <div>
+                    <button onClick={() => loginParent()} style={{ marginTop: '0.9rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', padding: '0.7rem 2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                      Login →
+                    </button>
+                  </div>
+                </div>
+              )}
+              {parentLoginError && <div style={{ color: '#dc2626', fontSize: '0.9rem', marginTop: '0.75rem' }}>{parentLoginError}</div>}
             </>
           )}
 
@@ -1369,6 +1512,28 @@ function App() {
         {/* Admin Tab: manage kids (+ task assignment) and the task library */}
         {activeTab === 'admin' && adminUnlocked && (
           <div>
+            {/* ---- Setup guide ---- */}
+            <div style={{ marginBottom: '1.5rem', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+              <button
+                onClick={() => setShowSetupHelp(h => !h)}
+                style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', padding: 0 }}
+              >
+                {showSetupHelp ? '▾' : '▸'} 🛠️ How to set up this app for kids
+              </button>
+              {showSetupHelp && (
+                <ol style={{ margin: '0.85rem 0 0', paddingLeft: '1.25rem', color: '#475569', fontSize: '0.88rem', lineHeight: 1.65 }}>
+                  <li><strong>Add a parent</strong> — tap “+ Add Parent” on the login screen, enter a name and a 4-digit PIN.</li>
+                  <li><strong>Log in</strong> as that parent (enter the PIN).</li>
+                  <li>Open the <strong>⚙️ Admin</strong> tab and enter your PIN to unlock it.</li>
+                  <li><strong>Add your kids</strong> below under “Manage Kids” — name, age, and an optional kid PIN.</li>
+                  <li><strong>Add tasks</strong> under “Task Library”, or tap <strong>Load starter tasks</strong> for a ready-made set.</li>
+                  <li><strong>Assign tasks</strong> to each kid by ticking them under that kid.</li>
+                  <li><strong>Add games</strong> under “Game Links”, or tap <strong>Load starter games</strong>.</li>
+                  <li>Done! Log in, pick a kid, and they check off tasks to earn points and unlock games. 🎉</li>
+                </ol>
+              )}
+            </div>
+
             {/* ---- Parent settings ---- */}
             <div className="section-title" style={{ marginBottom: '0.75rem' }}>👤 Parent</div>
             {activeParent && (
